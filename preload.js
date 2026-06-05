@@ -55,6 +55,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     listRunningMachines: () => ipcRenderer.invoke('runtime:list-running-machines'),
     onRuntimeEvent: (handler) => on('runtime:event', handler)
   },
+  updater: {
+    getCurrentInfo: () => ipcRenderer.invoke('updater:get-current-info'),
+    checkForUpdates: (options) => ipcRenderer.invoke('updater:check-for-updates', options),
+    skipVersion: (version) => ipcRenderer.invoke('updater:skip-version', version),
+    openUpdatePage: (url) => ipcRenderer.invoke('updater:open-update-page', url),
+    onUpdateAvailable: (handler) => on('app:update-available', handler)
+  },
   app: {
     getMetadata: () => ipcRenderer.invoke('app:get-metadata'),
     openExternal: (url) => ipcRenderer.invoke('app:open-external', url),

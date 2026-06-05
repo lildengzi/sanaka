@@ -11,7 +11,7 @@ import {
   type SakaTemplate,
   type TemplateCatalogEntry
 } from '../domain/schemas';
-import type { RuntimeMachineState } from '../types/electron';
+import type { RuntimeMachineState, UpdateAvailableEvent, UpdateCheckResult, UpdateCurrentInfo } from '../types/electron';
 import { builtInTemplates, createMachineFromTemplate, createMachineFromTemplateDocument, normalizeMachineCompatibility } from '../domain/templates';
 import { resources } from '../i18n/resources';
 import { makeRecentEntry } from '../lib/machine';
@@ -185,6 +185,13 @@ interface AppStoreValue {
   renameMachine: (machinePath: string, newTitle: string) => Promise<boolean>;
   duplicateMachine: (machinePath: string) => Promise<boolean>;
   highlightedMachinePath: string | null;
+  updateCurrentInfo: UpdateCurrentInfo | null;
+  updateLastCheck: UpdateCheckResult | null;
+  updateReminder: UpdateAvailableEvent | null;
+  dismissUpdateReminder: () => void;
+  checkForUpdates: (options?: { silent?: boolean }) => Promise<UpdateCheckResult>;
+  skipUpdateVersion: (version: string) => Promise<boolean>;
+  openUpdatePage: (url: string) => Promise<void>;
 }
 
 const AppStoreContext = createContext<AppStoreValue | null>(null);
@@ -231,14 +238,18 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [transition, setTransition] = useState<{ active: boolean; type: 'launch' | 'console' | 'delete' }>({ active: false, type: 'launch' });
   const [deleteTarget, setDeleteTarget] = useState<{ path: string; title: string } | null>(null);
   const [startError, setStartError] = useState<{ title: string; description: string; detail?: string } | null>(null);
+  const [updateCurrentInfo, setUpdateCurrentInfo] = useState<UpdateCurrentInfo | null>(null);
+  const [updateLastCheck, setUpdateLastCheck] = useState<UpdateCheckResult | null>(null);
+  const [updateReminder, setUpdateReminder] = useState<UpdateAvailableEvent | null>(null);
 
   const initialize = useCallback(async () => {
-    const [loadedSettings, loadedRecents, meta, environment, machines] = await Promise.all([
+    const [loadedSettings, loadedRecents, meta, environment, machines, updaterInfo] = await Promise.all([
       window.electronAPI.settings.load(),
       window.electronAPI.recents.list(),
       window.electronAPI.app.getMetadata(),
       window.electronAPI.runtime.getRuntimeEnvironment(),
-      window.electronAPI.runtime.listRunningMachines()
+      window.electronAPI.runtime.listRunningMachines(),
+      window.electronAPI.updater.getCurrentInfo()
     ]);
 
     const parsedSettings = appSettingsSchema.safeParse(loadedSettings).success ? normalizeSettingsForMainline(appSettingsSchema.parse(loadedSettings)) : defaultSettings;
@@ -257,6 +268,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setAppMeta(meta);
     setRuntimeEnvironment(environment);
     setRuntimeMachines(machines);
+    setUpdateCurrentInfo(updaterInfo);
     document.body.classList.toggle('platform-darwin', meta.platform === 'darwin');
     setReady(true);
   }, []);
@@ -300,10 +312,83 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    const updaterApi = window.electronAPI.updater;
+    if (!updaterApi) {
+      return () => undefined;
+    }
+
+    const dispose = updaterApi.onUpdateAvailable((event) => {
+      setUpdateReminder(event);
+      setUpdateCurrentInfo({
+        currentVersion: event.currentVersion,
+        currentChannel: event.currentChannel,
+        skippedVersion: event.skippedVersion
+      });
+      setUpdateLastCheck({
+        currentVersion: event.currentVersion,
+        currentChannel: event.currentChannel,
+        latest: event.manifest,
+        hasUpdate: true,
+        skippedVersion: event.skippedVersion
+      });
+    });
+
+    return () => {
+      dispose();
+    };
+  }, []);
+
   const persistSettings = useCallback(async (next: AppSettings) => {
     const parsed = normalizeSettingsForMainline(appSettingsSchema.parse(next));
     setSettings(parsed);
     await window.electronAPI.settings.save(parsed);
+  }, []);
+
+  const dismissUpdateReminder = useCallback(() => {
+    setUpdateReminder(null);
+  }, []);
+
+  const checkForUpdates = useCallback(async (options: { silent?: boolean } = {}) => {
+    const result = await window.electronAPI.updater.checkForUpdates(options);
+    setUpdateCurrentInfo({
+      currentVersion: result.currentVersion,
+      currentChannel: result.currentChannel,
+      skippedVersion: result.skippedVersion
+    });
+    setUpdateLastCheck(result);
+    if (!result.hasUpdate && !options.silent) {
+      setUpdateReminder(null);
+    }
+    return result;
+  }, []);
+
+  const skipUpdateVersion = useCallback(async (version: string) => {
+    if (!version) return false;
+    const result = await window.electronAPI.updater.skipVersion(version);
+    setUpdateCurrentInfo((current) =>
+      current
+        ? {
+            ...current,
+            skippedVersion: result.skippedVersion
+          }
+        : current
+    );
+    setUpdateLastCheck((current) =>
+      current
+        ? {
+            ...current,
+            skippedVersion: result.skippedVersion
+          }
+        : current
+    );
+    setUpdateReminder((current) => (current?.manifest.version === version ? null : current));
+    return true;
+  }, []);
+
+  const openUpdatePage = useCallback(async (url: string) => {
+    if (!url) return;
+    await window.electronAPI.updater.openUpdatePage(url);
   }, []);
 
   const setLanguage = useCallback(
@@ -900,7 +985,14 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       setStartError,
       renameMachine,
       duplicateMachine,
-      highlightedMachinePath
+      highlightedMachinePath,
+      updateCurrentInfo,
+      updateLastCheck,
+      updateReminder,
+      dismissUpdateReminder,
+      checkForUpdates,
+      skipUpdateVersion,
+      openUpdatePage
     }),
     [
       aboutOpen,
@@ -937,7 +1029,14 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       startError,
       renameMachine,
       duplicateMachine,
-      highlightedMachinePath
+      highlightedMachinePath,
+      updateCurrentInfo,
+      updateLastCheck,
+      updateReminder,
+      dismissUpdateReminder,
+      checkForUpdates,
+      skipUpdateVersion,
+      openUpdatePage
     ]
   );
 

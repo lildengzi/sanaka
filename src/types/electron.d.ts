@@ -243,6 +243,13 @@ export interface ElectronApi {
     listRunningMachines: () => Promise<RuntimeMachineState[]>;
     onRuntimeEvent: (handler: (payload: RuntimeEvent) => void) => () => void;
   };
+  updater: {
+    getCurrentInfo: () => Promise<UpdateCurrentInfo>;
+    checkForUpdates: (options?: { silent?: boolean }) => Promise<UpdateCheckResult>;
+    skipVersion: (version: string) => Promise<{ ok: true; skippedVersion: string }>;
+    openUpdatePage: (url: string) => Promise<{ ok: true }>;
+    onUpdateAvailable: (handler: (payload: UpdateAvailableEvent) => void) => () => void;
+  };
   app: {
     getMetadata: () => Promise<AppMetadata>;
     openExternal: (url: string) => Promise<{ ok: true }>;
@@ -256,4 +263,31 @@ declare global {
   interface Window {
     electronAPI: ElectronApi;
   }
+}
+
+export interface UpdateCurrentInfo {
+  currentVersion: string;
+  currentChannel: 'release' | 'beta';
+  skippedVersion?: string;
+}
+
+export interface UpdateManifest {
+  version: string;
+  channel: 'release' | 'beta';
+  mandatory: boolean;
+  pubDate?: string;
+  url: string;
+  title?: string;
+  notes: string;
+}
+
+export interface UpdateCheckResult extends UpdateCurrentInfo {
+  latest?: UpdateManifest;
+  hasUpdate: boolean;
+  error?: string;
+}
+
+export interface UpdateAvailableEvent extends UpdateCurrentInfo {
+  source: 'automatic' | 'manual';
+  manifest: UpdateManifest;
 }

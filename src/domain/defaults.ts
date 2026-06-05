@@ -9,6 +9,9 @@ export const defaultSettings: AppSettings = {
     displayBackendHint: 'vnc'
   },
   templateCatalog: defaultTemplateCatalog,
+  updates: {
+    skippedVersion: ''
+  },
   experimental: {
     brandedHero: true,
     advancedConsole: true,

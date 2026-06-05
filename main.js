@@ -3,6 +3,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const { DiskImageService } = require('./runtime/DiskImageService');
 const { RuntimeManager } = require('./runtime/RuntimeManager');
+const { UpdateService } = require('./runtime/UpdateService');
 
 const SETTINGS_FILE = 'settings.json';
 const RECENTS_FILE = 'recents.json';
@@ -17,6 +18,7 @@ let mainWindow = null;
 let pendingSakaPaths = [];
 let runtimeManager = null;
 let diskImageService = null;
+let updateService = null;
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
@@ -63,6 +65,19 @@ function emitToRenderer(channel, payload) {
 
 function emitRuntimeEvent(payload) {
   emitToRenderer('runtime:event', payload);
+}
+
+function getUpdateService() {
+  if (!updateService) {
+    updateService = new UpdateService({
+      appVersion: app.getVersion(),
+      loadSettings: () => readJsonFile(SETTINGS_FILE, null),
+      saveSettings: (settings) => writeJsonFile(SETTINGS_FILE, settings),
+      emitToRenderer,
+      openExternal: (url) => shell.openExternal(url)
+    });
+  }
+  return updateService;
 }
 
 function normalizeSakaArg(argv) {
@@ -598,6 +613,18 @@ const ipcHandlers = {
   async detectQemu() {
     return getRuntimeManager().detectQemu();
   },
+  async getUpdaterCurrentInfo() {
+    return getUpdateService().getCurrentInfo();
+  },
+  async checkForUpdates(_event, options) {
+    return getUpdateService().checkForUpdates(options || {});
+  },
+  async skipUpdateVersion(_event, version) {
+    return getUpdateService().skipVersion(version);
+  },
+  async openUpdatePage(_event, url) {
+    return getUpdateService().openUpdatePage(url);
+  },
   async getRuntimeEnvironment() {
     return getRuntimeManager().getRuntimeEnvironment();
   },
@@ -654,6 +681,7 @@ app.whenReady().then(() => {
   }
 
   void getRuntimeManager().initialize();
+  getUpdateService().initialize();
 
   ipcMain.handle('files:open-machine-bundle', ipcHandlers.openMachineBundle);
   ipcMain.handle('files:open-saka', ipcHandlers.openSaka);
@@ -680,6 +708,10 @@ app.whenReady().then(() => {
   ipcMain.handle('recents:remove', ipcHandlers.removeRecent);
   ipcMain.handle('app:get-metadata', ipcHandlers.getAppMetadata);
   ipcMain.handle('app:open-external', ipcHandlers.openExternal);
+  ipcMain.handle('updater:get-current-info', ipcHandlers.getUpdaterCurrentInfo);
+  ipcMain.handle('updater:check-for-updates', ipcHandlers.checkForUpdates);
+  ipcMain.handle('updater:skip-version', ipcHandlers.skipUpdateVersion);
+  ipcMain.handle('updater:open-update-page', ipcHandlers.openUpdatePage);
   ipcMain.handle('runtime:detect-qemu', ipcHandlers.detectQemu);
   ipcMain.handle('runtime:get-environment', ipcHandlers.getRuntimeEnvironment);
   ipcMain.handle('runtime:start-machine', ipcHandlers.startMachine);
@@ -704,6 +736,9 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', async () => {
+  if (updateService) {
+    updateService.dispose();
+  }
   if (runtimeManager) {
     await runtimeManager.dispose().catch(() => null);
   }

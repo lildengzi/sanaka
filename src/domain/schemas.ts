@@ -26,6 +26,11 @@ export const appSettingsSchema = z.object({
     displayBackendHint: displayBackendHintSchema
   }),
   templateCatalog: z.array(templateCatalogEntrySchema),
+  updates: z
+    .object({
+      skippedVersion: z.string().default('')
+    })
+    .default({ skippedVersion: '' }),
   experimental: z.object({
     brandedHero: z.boolean(),
     advancedConsole: z.boolean(),

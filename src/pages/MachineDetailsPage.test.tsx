@@ -96,6 +96,13 @@ function mockElectronApi() {
       listRunningMachines: vi.fn(async () => []),
       onRuntimeEvent: vi.fn(() => () => undefined)
     },
+    updater: {
+      getCurrentInfo: vi.fn(async () => ({ currentVersion: '1.0.0', currentChannel: 'release' as const, skippedVersion: '' })),
+      checkForUpdates: vi.fn(async () => ({ currentVersion: '1.0.0', currentChannel: 'release' as const, hasUpdate: false, skippedVersion: '' })),
+      skipVersion: vi.fn(async () => ({ ok: true as const, skippedVersion: '1.0.0' })),
+      openUpdatePage: vi.fn(async () => ({ ok: true as const })),
+      onUpdateAvailable: vi.fn(() => () => undefined)
+    },
     app: {
       getMetadata: vi.fn(async () => ({ name: 'Sanaka', version: '1.0.0', platform: 'darwin', arch: 'x64', userDataPath: '/tmp', documentsPath: '/tmp/Documents', defaultMachineDirectory: '/tmp/Documents/Sanaka' })),
       openExternal: vi.fn(async () => ({ ok: true as const })),

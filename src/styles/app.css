@@ -3874,3 +3874,154 @@ body.platform-darwin .app-shell__content {
 .about-dialog__link svg {
   flex-shrink: 0;
 }
+
+/* ============================================
+   Update Reminder
+   ============================================ */
+
+.update-reminder-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 26, 35, 0);
+  backdrop-filter: blur(0px);
+  -webkit-backdrop-filter: blur(0px);
+  opacity: 0;
+  transition:
+    opacity 220ms var(--ease-standard),
+    background 220ms var(--ease-standard),
+    backdrop-filter 220ms var(--ease-standard);
+  z-index: 1000;
+  padding: 24px;
+  pointer-events: none;
+}
+
+.update-reminder-backdrop--visible {
+  background: rgba(30, 26, 35, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.update-reminder {
+  position: relative;
+  width: min(100%, 520px);
+  max-height: min(90vh, 600px);
+  background: var(--panel);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-panel);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity 220ms var(--ease-standard),
+    transform 220ms var(--ease-standard);
+}
+
+.update-reminder--visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.update-reminder__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.update-reminder__title {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.update-reminder__date {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.update-reminder__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(61, 42, 79, 0.08);
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 200ms ease, color 200ms ease, transform 200ms ease;
+}
+
+.update-reminder__close:hover {
+  background: rgba(61, 42, 79, 0.16);
+  color: var(--text);
+  transform: scale(1.05);
+}
+
+.update-reminder__close:active {
+  transform: scale(0.95);
+}
+
+.update-reminder__close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.update-reminder__content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px;
+  scrollbar-gutter: stable;
+}
+
+.update-reminder__content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.update-reminder__content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.update-reminder__content::-webkit-scrollbar-thumb {
+  background: rgba(146, 121, 200, 0.35);
+  border-radius: 3px;
+}
+
+.update-reminder__content::-webkit-scrollbar-thumb:hover {
+  background: rgba(146, 121, 200, 0.5);
+}
+
+.update-reminder__notes {
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.update-reminder__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}

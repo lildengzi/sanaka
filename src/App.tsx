@@ -3,6 +3,7 @@ import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'r
 import { AboutDialog } from './components/AboutDialog';
 import { AboutPage } from './components/AboutPage';
 import { AppHeader } from './components/AppHeader';
+import { UpdateReminder } from './components/UpdateReminder';
 import { FullscreenTransition } from './components/FullscreenTransition';
 import { usePresence } from './hooks/usePresence';
 import { machineRoute } from './lib/routes';
@@ -56,7 +57,11 @@ function MainLayout() {
     deleteTarget,
     setDeleteTarget,
     deleteMachine,
-    triggerTransition
+    triggerTransition,
+    updateReminder,
+    dismissUpdateReminder,
+    skipUpdateVersion,
+    openUpdatePage
   } = useAppStore();
   const t = useT();
   const deleteModal = usePresence(Boolean(deleteTarget));
@@ -122,6 +127,12 @@ function MainLayout() {
       </div>
       <AboutPage isOpen={aboutPageOpen} onClose={handleAboutPageClose} clickPosition={logoClickPosition} />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <UpdateReminder
+        reminder={updateReminder}
+        onDismiss={dismissUpdateReminder}
+        onSkip={skipUpdateVersion}
+        onOpenPage={openUpdatePage}
+      />
       {transition.active && <FullscreenTransition type={transition.type} />}
 
       {deleteModal.mounted && (

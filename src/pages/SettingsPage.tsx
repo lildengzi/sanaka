@@ -64,7 +64,15 @@ const FlaskIcon = () => (
   </svg>
 );
 
-const tabs = ['general', 'files', 'runtime', 'displayAudio', 'templates', 'experimental'] as const;
+const DownloadIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/>
+    <line x1="12" y1="15" x2="12" y2="3"/>
+  </svg>
+);
+
+const tabs = ['general', 'files', 'runtime', 'displayAudio', 'templates', 'experimental', 'update'] as const;
 const languageOptions = [
   { value: 'zh-CN', label: 'zh-CN' },
   { value: 'en-US', label: 'en-US' }
@@ -110,11 +118,13 @@ function SettingsDrawerSection({
 }
 
 export function SettingsPage() {
-  const { appMeta, settings, persistSettings, importTemplateFromDialog, templates, updateTemplateCatalog } = useAppStore();
+  const { appMeta, settings, persistSettings, importTemplateFromDialog, templates, updateTemplateCatalog, updateCurrentInfo, checkForUpdates } = useAppStore();
   const t = useT();
   const [params, setParams] = useSearchParams();
   const initialTab = params.get('tab');
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>(tabs.includes(initialTab as (typeof tabs)[number]) ? (initialTab as (typeof tabs)[number]) : 'general');
+  const [checking, setChecking] = useState(false);
+  const [checkMessage, setCheckMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const nextTab = params.get('tab');
@@ -141,6 +151,24 @@ export function SettingsPage() {
       next.splice(target, 0, entry);
       return next;
     });
+  };
+
+  const handleCheckUpdates = async () => {
+    setChecking(true);
+    setCheckMessage(null);
+    try {
+      const result = await checkForUpdates({ silent: false });
+      if (result.error) {
+        setCheckMessage(t('settings.checkFailed'));
+      } else if (!result.hasUpdate) {
+        setCheckMessage(t('settings.alreadyLatest'));
+      }
+    } catch {
+      setCheckMessage(t('settings.checkFailed'));
+    } finally {
+      setChecking(false);
+      setTimeout(() => setCheckMessage(null), 3000);
+    }
   };
 
   const renderTemplateRow = (entry: TemplateCatalogEntry) => (
@@ -309,6 +337,44 @@ export function SettingsPage() {
                 onChange={(checked) => void patchSettings({ experimental: { ...settings.experimental, protocolInspector: checked } })}
                 label={t('settings.experimentalInspector')}
               />
+                </SectionCard>
+              ) : null}
+
+              {tab === 'update' ? (
+                <SectionCard title={t('settings.tabs.update')} description={t('settings.updateDescription')} icon={<DownloadIcon />}>
+                  <div className="field">
+                    <span className="field__label">{t('settings.currentVersion')}</span>
+                    <div className="info-panel">
+                      <strong>{updateCurrentInfo?.currentVersion || '0.0.1'}</strong>
+                    </div>
+                  </div>
+                  <div className="field">
+                    <span className="field__label">{t('settings.currentChannel')}</span>
+                    <div className="info-panel">
+                      <strong>{updateCurrentInfo?.currentChannel || 'Beta'}</strong>
+                    </div>
+                  </div>
+                  <div className="field">
+                    <span className="field__label">{t('settings.skippedVersion')}</span>
+                    <div className="info-panel">
+                      <strong>{updateCurrentInfo?.skippedVersion || t('settings.noSkippedVersion')}</strong>
+                    </div>
+                  </div>
+                  <div className="action-row">
+                    <button
+                      className="button button--primary"
+                      type="button"
+                      onClick={() => void handleCheckUpdates()}
+                      disabled={checking}
+                    >
+                      {checking ? t('settings.checkingUpdates') : t('settings.checkUpdates')}
+                    </button>
+                  </div>
+                  {checkMessage ? (
+                    <div className="info-panel" style={{ marginTop: '8px' }}>
+                      <p style={{ margin: 0 }}>{checkMessage}</p>
+                    </div>
+                  ) : null}
                 </SectionCard>
               ) : null}
             </SettingsDrawerSection>
