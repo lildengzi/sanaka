@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <rect x="6" y="8" width="44" height="30" rx="4" stroke="currentColor" stroke-width="2" fill="none"/>
+  <rect x="12" y="14" width="32" height="18" rx="2" fill="currentColor" opacity="0.08"/>
+  <path d="M22 44h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <path d="M20 38h16l-2 6H22l-2-6Z" fill="currentColor" opacity="0.12"/>
+</svg>

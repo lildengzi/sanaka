@@ -1,0 +1,24 @@
+.DS_Store
+node_modules/
+dist/
+release/
+config-temp/
+.sanaka-secrets/
+.trae/
+.lovable/
+api-key-deepseek.txt
+xiaomi-api-key.txt
+*.log
+
+# Local build artifacts
+build/icon.icns
+
+# macOS / editor noise
+.idea/
+.vscode/
+
+# Temporary archives and screenshots
+docs/assets/archive/
+
+# Local experiments / unrelated assets
+dos（codex不用看）/

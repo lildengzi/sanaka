@@ -1,0 +1,211 @@
+import { useEffect, useState } from 'react';
+import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { AboutDialog } from './components/AboutDialog';
+import { AboutPage } from './components/AboutPage';
+import { AppHeader } from './components/AppHeader';
+import { FullscreenTransition } from './components/FullscreenTransition';
+import { usePresence } from './hooks/usePresence';
+import { machineRoute } from './lib/routes';
+import { HomePage } from './pages/HomePage';
+import { MachineBuilderPage } from './pages/MachineBuilderPage';
+import { MachineConsolePage } from './pages/MachineConsolePage';
+import { MachineDetailsPage } from './pages/MachineDetailsPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { useAppStore } from './store/AppStore';
+import { useT } from './hooks/useT';
+
+const TrashIcon = ({ style }: { style?: React.CSSProperties }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    <line x1="10" y1="11" x2="10" y2="17" />
+    <line x1="14" y1="11" x2="14" y2="17" />
+  </svg>
+);
+
+const AlertIcon = ({ style }: { style?: React.CSSProperties }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
+  </svg>
+);
+
+function ConsoleLayout() {
+  return (
+    <div className="app-shell app-shell--console">
+      <div className="app-shell__window">
+        <div className="app-dragbar" aria-hidden="true" />
+        <main className="app-shell__content app-shell__content--console">
+          <MachineConsolePage />
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function MainLayout() {
+  const navigate = useNavigate();
+  const {
+    ready,
+    aboutOpen,
+    setAboutOpen,
+    openSakaByPath,
+    transition,
+    deleteTarget,
+    setDeleteTarget,
+    deleteMachine,
+    triggerTransition
+  } = useAppStore();
+  const t = useT();
+  const deleteModal = usePresence(Boolean(deleteTarget));
+  const [aboutPageOpen, setAboutPageOpen] = useState(false);
+  const [logoClickPosition, setLogoClickPosition] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const disposeOpenSaka = window.electronAPI.app.onOpenSaka(async ({ path }) => {
+      const result = await openSakaByPath(path);
+      if (!result) return;
+      navigate(result.kind === 'machine' ? machineRoute(result.machineId, result.path) : '/machines/new');
+    });
+    const disposeAbout = window.electronAPI.app.onOpenAbout(() => setAboutOpen(true));
+    const disposeSettings = window.electronAPI.app.onOpenSettings(() => navigate('/settings'));
+    return () => {
+      disposeOpenSaka();
+      disposeAbout();
+      disposeSettings();
+    };
+  }, [navigate, openSakaByPath, setAboutOpen]);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    const path = deleteTarget.path;
+    setDeleteTarget(null);
+    triggerTransition('delete', async () => {
+      await deleteMachine(path);
+      navigate('/');
+    });
+  };
+
+  const handleLogoClick = (position: { x: number; y: number }) => {
+    setLogoClickPosition(position);
+    setAboutPageOpen(true);
+  };
+
+  const handleAboutPageClose = () => {
+    setAboutPageOpen(false);
+  };
+
+  if (!ready) {
+    return <div className="page-loading">{t('common.loading')}</div>;
+  }
+
+  return (
+    <>
+      <div className="app-shell">
+        <div className="app-shell__window">
+          <div className="app-dragbar" aria-hidden="true" />
+          <div className="app-shell__surface">
+            <AppHeader onLogoClick={handleLogoClick} />
+            <main className="app-shell__content">
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/machines/new" element={<MachineBuilderPage />} />
+                <Route path="/machines/:machineId" element={<MachineDetailsPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </main>
+          </div>
+        </div>
+      </div>
+      <AboutPage isOpen={aboutPageOpen} onClose={handleAboutPageClose} clickPosition={logoClickPosition} />
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      {transition.active && <FullscreenTransition type={transition.type} />}
+
+      {deleteModal.mounted && (
+        <div className={deleteModal.visible ? 'modal-backdrop modal-backdrop--visible' : 'modal-backdrop'} role="presentation" onClick={() => setDeleteTarget(null)}>
+          <div className={deleteModal.visible ? 'modal-card modal-card--visible' : 'modal-card'} role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title" onClick={(event) => event.stopPropagation()}>
+            <div className="brand-orb brand-orb--modal" />
+            <h2 id="delete-confirm-title" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--danger)', margin: '0 0 10px 0', fontSize: '1.25rem' }}>
+              <TrashIcon style={{ width: '24px', height: '24px' }} />
+              {t('details.deleteTitle')}
+            </h2>
+            <p className="muted" style={{ margin: '0 0 24px 0', fontSize: '0.88rem', lineHeight: '1.5' }}>
+              {t('details.deleteConfirm')}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button className="button button--secondary" type="button" onClick={() => setDeleteTarget(null)}>
+                {t('app.cancel')}
+              </button>
+              <button className="button button--danger" type="button" onClick={handleConfirmDelete}>
+                {t('details.deleteMachine')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export function RoutedShell() {
+  const location = useLocation();
+  const isConsole = location.pathname.endsWith('/console');
+  const { startError, setStartError } = useAppStore();
+  const t = useT();
+  const startErrorModal = usePresence(Boolean(startError));
+  const activeStartError = startError;
+
+  return (
+    <>
+      {isConsole ? <ConsoleLayout /> : <MainLayout />}
+      {startErrorModal.mounted && (
+        <div className={startErrorModal.visible ? 'modal-backdrop modal-backdrop--visible' : 'modal-backdrop'} role="presentation" onClick={() => setStartError(null)}>
+          <div className={startErrorModal.visible ? 'modal-card modal-card--visible' : 'modal-card'} role="dialog" aria-modal="true" aria-labelledby="start-error-title" onClick={(event) => event.stopPropagation()}>
+            <div className="brand-orb brand-orb--modal" />
+            <h2 id="start-error-title" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--danger)', margin: '0 0 10px 0', fontSize: '1.25rem' }}>
+              <AlertIcon style={{ width: '24px', height: '24px' }} />
+              {activeStartError?.title}
+            </h2>
+            <p className="muted" style={{ margin: '0 0 24px 0', fontSize: '0.88rem', lineHeight: '1.5' }}>
+              {activeStartError?.description}
+            </p>
+            {activeStartError?.detail && (
+              <div
+                style={{
+                  margin: '0 0 24px 0',
+                  padding: '12px 14px',
+                  borderRadius: '12px',
+                  background: 'rgba(117, 99, 148, 0.08)',
+                  border: '1px solid rgba(117, 99, 148, 0.16)',
+                  textAlign: 'left'
+                }}
+              >
+                <div style={{ fontSize: '0.76rem', fontWeight: 600, color: 'rgba(74, 55, 98, 0.72)', marginBottom: '6px' }}>
+                  QEMU / Runtime
+                </div>
+                <div style={{ fontSize: '0.8rem', lineHeight: '1.5', color: 'rgba(74, 55, 98, 0.88)', wordBreak: 'break-word' }}>
+                  {activeStartError?.detail}
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button className="button button--secondary" type="button" onClick={() => setStartError(null)}>
+                {t('app.close')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export function App() {
+  return (
+    <HashRouter>
+      <RoutedShell />
+    </HashRouter>
+  );
+}

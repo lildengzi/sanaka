@@ -1,0 +1,427 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="3000" height="1024" viewBox="0 0 3000 1024">
+  <defs>
+    <pattern id="img0" patternUnits="objectBoundingBox" width="1" height="1">
+      <image href="data:image/png;base64,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" width="32" height="32" preserveAspectRatio="xMidYMid meet"/>
+    </pattern>
+    <pattern id="img1" patternUnits="objectBoundingBox" width="1" height="1">
+      <image href="data:image/png;base64,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" width="32" height="32" preserveAspectRatio="xMidYMid meet"/>
+    </pattern>
+  </defs>
+  <g>
+    <rect width="3000" height="1024" fill="#F3EDF7"/>
+    <g transform="translate(74, 48)">
+      <rect width="1360" height="900" rx="36" ry="36" fill="#FCFBFF"/>
+      <g>
+        <rect width="1360" height="72" fill="#FCFBFF"/>
+        <g transform="translate(32, 71)">
+          <rect width="1296" height="1" fill="#EEE7F2"/>
+        </g>
+        <g transform="translate(32, 104)">
+          <rect width="220" height="748" rx="28" ry="28" fill="#F4EEF9"/>
+          <g transform="translate(20, 20)">
+            <rect width="32" height="32" rx="16" ry="16" fill="url(#img0)"/>
+          </g>
+          <g transform="translate(62, 18)">
+            <text x="0" y="14" font-family="Inter" font-size="14" fill="#2B2233">Sanaka</text>
+          </g>
+          <g transform="translate(62, 40)">
+            <text x="0" y="11" font-family="Inter" font-size="11" fill="#82788D">Virtual Machine Studio</text>
+          </g>
+          <g transform="translate(16, 88)">
+            <rect width="188" height="36" rx="18" ry="18" fill="#E8DDF8"/>
+            <g transform="translate(14, 13)">
+              <rect width="10" height="10" rx="5" ry="5" fill="#B895F0"/>
+            </g>
+            <g transform="translate(34, 10)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#4E4460">首页</text>
+            </g>
+          </g>
+          <g transform="translate(16, 132)">
+            <g transform="translate(14, 11)">
+              <rect width="10" height="10" rx="5" ry="5" fill="#D5CAE5"/>
+            </g>
+            <g transform="translate(34, 8)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#847A91">创建虚拟机</text>
+            </g>
+          </g>
+          <g transform="translate(16, 172)">
+            <g transform="translate(14, 11)">
+              <rect width="10" height="10" rx="5" ry="5" fill="#D5CAE5"/>
+            </g>
+            <g transform="translate(34, 8)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#847A91">打开虚拟机配置</text>
+            </g>
+          </g>
+          <g transform="translate(16, 212)">
+            <g transform="translate(14, 11)">
+              <rect width="10" height="10" rx="5" ry="5" fill="#D5CAE5"/>
+            </g>
+            <g transform="translate(34, 8)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#847A91">模板</text>
+            </g>
+          </g>
+          <g transform="translate(16, 644)">
+            <g transform="translate(14, 11)">
+              <rect width="10" height="10" rx="5" ry="5" fill="#D5CAE5"/>
+            </g>
+            <g transform="translate(34, 8)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#847A91">设置</text>
+            </g>
+          </g>
+          <g transform="translate(16, 684)">
+            <g transform="translate(14, 11)">
+              <rect width="10" height="10" rx="5" ry="5" fill="#D5CAE5"/>
+            </g>
+            <g transform="translate(34, 8)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#847A91">关于</text>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(316, 118)">
+          <g>
+            <text x="0" y="20" font-family="Inter" font-size="20" fill="#28212F">工作台</text>
+          </g>
+          <g transform="translate(0, 30)">
+            <text x="0" y="12" font-family="Inter" font-size="12" fill="#7D7388">新建、打开或继续你的虚拟机。</text>
+          </g>
+          <g transform="translate(636, 0)">
+            <rect width="120" height="36" rx="18" ry="18" fill="#F3EDF7"/>
+            <g transform="translate(14, 13)">
+              <rect width="8" height="8" rx="4" ry="4" fill="#B895F0"/>
+            </g>
+            <g transform="translate(30, 10)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#5F536C">打开虚拟机配置</text>
+            </g>
+          </g>
+          <g transform="translate(772, 0)">
+            <rect width="96" height="36" rx="18" ry="18" fill="#D9C2F7"/>
+            <g transform="translate(14, 13)">
+              <rect width="8" height="8" rx="4" ry="4" fill="#8B63D8"/>
+            </g>
+            <g transform="translate(30, 10)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#3E285F">创建虚拟机</text>
+            </g>
+          </g>
+          <g transform="translate(182, 216)">
+            <g transform="translate(188, 26)">
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#9A8EB0">开始创建</text>
+            </g>
+            <g transform="translate(121, 86)">
+              <text x="0" y="18" font-family="Inter" font-size="18" fill="#2C2333">还没有虚拟机</text>
+            </g>
+            <g transform="translate(89, 120)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#857B90">从模板开始，或者打开现有虚拟机配置。</text>
+            </g>
+            <g transform="translate(153, 164)">
+              <rect width="198" height="40" rx="20" ry="20" fill="#D9C2F7"/>
+              <g transform="translate(47, 12)">
+                <text x="0" y="12" font-family="Inter" font-size="12" fill="#3E285F">创建第一台虚拟机</text>
+              </g>
+            </g>
+            <g transform="translate(170, 214)">
+              <rect width="164" height="36" rx="18" ry="18" fill="#F3EDF7"/>
+              <g transform="translate(34, 10)">
+                <text x="0" y="12" font-family="Inter" font-size="12" fill="#60546D">打开虚拟机配置</text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+    <g transform="translate(1566, 48)">
+      <rect width="1360" height="900" rx="36" ry="36" fill="#FCFBFF"/>
+      <g>
+        <rect width="1360" height="72" fill="#FCFBFF"/>
+        <g transform="translate(32, 71)">
+          <rect width="1296" height="1" fill="#EEE7F2"/>
+        </g>
+        <g transform="translate(32, 104)">
+          <rect width="220" height="748" rx="28" ry="28" fill="#F4EEF9"/>
+          <g transform="translate(20, 20)">
+            <rect width="32" height="32" rx="16" ry="16" fill="url(#img1)"/>
+          </g>
+          <g transform="translate(62, 18)">
+            <text x="0" y="14" font-family="Inter" font-size="14" fill="#2B2233">Sanaka</text>
+          </g>
+          <g transform="translate(62, 40)">
+            <text x="0" y="11" font-family="Inter" font-size="11" fill="#82788D">Virtual Machine Studio</text>
+          </g>
+          <g transform="translate(16, 88)">
+            <rect width="188" height="36" rx="18" ry="18" fill="#E8DDF8"/>
+            <g transform="translate(14, 13)">
+              <rect width="10" height="10" rx="5" ry="5" fill="#B895F0"/>
+            </g>
+            <g transform="translate(34, 10)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#4E4460">首页</text>
+            </g>
+          </g>
+          <g transform="translate(16, 132)">
+            <g transform="translate(14, 11)">
+              <rect width="10" height="10" rx="5" ry="5" fill="#D5CAE5"/>
+            </g>
+            <g transform="translate(34, 8)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#847A91">创建虚拟机</text>
+            </g>
+          </g>
+          <g transform="translate(16, 172)">
+            <g transform="translate(14, 11)">
+              <rect width="10" height="10" rx="5" ry="5" fill="#D5CAE5"/>
+            </g>
+            <g transform="translate(34, 8)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#847A91">打开虚拟机配置</text>
+            </g>
+          </g>
+          <g transform="translate(16, 212)">
+            <g transform="translate(14, 11)">
+              <rect width="10" height="10" rx="5" ry="5" fill="#D5CAE5"/>
+            </g>
+            <g transform="translate(34, 8)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#847A91">模板</text>
+            </g>
+          </g>
+          <g transform="translate(16, 644)">
+            <g transform="translate(14, 11)">
+              <rect width="10" height="10" rx="5" ry="5" fill="#D5CAE5"/>
+            </g>
+            <g transform="translate(34, 8)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#847A91">设置</text>
+            </g>
+          </g>
+          <g transform="translate(16, 684)">
+            <g transform="translate(14, 11)">
+              <rect width="10" height="10" rx="5" ry="5" fill="#D5CAE5"/>
+            </g>
+            <g transform="translate(34, 8)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#847A91">关于</text>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(316, 118)">
+          <g>
+            <text x="0" y="20" font-family="Inter" font-size="20" fill="#28212F">工作台</text>
+          </g>
+          <g transform="translate(0, 30)">
+            <text x="0" y="12" font-family="Inter" font-size="12" fill="#7D7388">6 台虚拟机，最近更新。</text>
+          </g>
+          <g transform="translate(0, 74)">
+            <rect width="50" height="30" rx="15" ry="15" fill="#EFE8F8"/>
+            <g transform="translate(17, 9)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#5D506A">全部</text>
+            </g>
+          </g>
+          <g transform="translate(62, 74)">
+            <rect width="50" height="30" rx="15" ry="15" fill="#F7F3FA"/>
+            <g transform="translate(16, 9)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#8A7E97">最近</text>
+            </g>
+          </g>
+          <g transform="translate(124, 74)">
+            <rect width="58" height="30" rx="15" ry="15" fill="#F7F3FA"/>
+            <g transform="translate(14, 9)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#8A7E97">运行中</text>
+            </g>
+          </g>
+          <g transform="translate(668, 0)">
+            <rect width="120" height="36" rx="18" ry="18" fill="#F3EDF7"/>
+            <g transform="translate(14, 13)">
+              <rect width="8" height="8" rx="4" ry="4" fill="#B895F0"/>
+            </g>
+            <g transform="translate(30, 10)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#5F536C">打开虚拟机配置</text>
+            </g>
+          </g>
+          <g transform="translate(804, 0)">
+            <rect width="96" height="36" rx="18" ry="18" fill="#D9C2F7"/>
+            <g transform="translate(14, 13)">
+              <rect width="8" height="8" rx="4" ry="4" fill="#8B63D8"/>
+            </g>
+            <g transform="translate(30, 10)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#3E285F">创建虚拟机</text>
+            </g>
+          </g>
+          <g transform="translate(0, 132)">
+            <rect width="248" height="220" rx="24" ry="24" fill="#FFFFFF"/>
+            <g transform="translate(16, 16)">
+              <rect width="216" height="116" rx="20" ry="20" fill="#ECE6F8"/>
+            </g>
+            <g transform="translate(32, 34)">
+              <rect width="58" height="14" rx="7" ry="7" fill="#FFFFFF"/>
+            </g>
+            <g transform="translate(32, 62)">
+              <rect width="92" height="10" rx="5" ry="5" fill="#D9C8F2"/>
+            </g>
+            <g transform="translate(32, 82)">
+              <rect width="76" height="10" rx="5" ry="5" fill="#E9DCF8"/>
+            </g>
+            <g transform="translate(158, 74)">
+              <rect width="58" height="42" rx="16" ry="16" fill="#D8C2F7"/>
+            </g>
+            <g transform="translate(16, 150)">
+              <text x="0" y="14" font-family="Inter" font-size="14" fill="#2D2435">Windows 11 Dev</text>
+            </g>
+            <g transform="translate(16, 174)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#857A90">Windows 10/11</text>
+            </g>
+            <g transform="translate(16, 192)">
+              <rect width="44" height="20" rx="10" ry="10" fill="#DCF1E4"/>
+              <g transform="translate(11, 6)">
+                <text x="0" y="10" font-family="Inter" font-size="10" fill="#3D6A50">运行中</text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(276, 132)">
+            <rect width="248" height="220" rx="24" ry="24" fill="#FFFFFF"/>
+            <g transform="translate(16, 16)">
+              <rect width="216" height="116" rx="20" ry="20" fill="#EDF1F8"/>
+            </g>
+            <g transform="translate(32, 34)">
+              <rect width="58" height="14" rx="7" ry="7" fill="#FFFFFF"/>
+            </g>
+            <g transform="translate(32, 62)">
+              <rect width="92" height="10" rx="5" ry="5" fill="#CFE0F7"/>
+            </g>
+            <g transform="translate(32, 82)">
+              <rect width="76" height="10" rx="5" ry="5" fill="#E2EBF8"/>
+            </g>
+            <g transform="translate(158, 74)">
+              <rect width="58" height="42" rx="16" ry="16" fill="#C8D9F5"/>
+            </g>
+            <g transform="translate(16, 150)">
+              <text x="0" y="14" font-family="Inter" font-size="14" fill="#2D2435">Fedora Lab</text>
+            </g>
+            <g transform="translate(16, 174)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#857A90">Linux Generic</text>
+            </g>
+            <g transform="translate(16, 192)">
+              <rect width="44" height="20" rx="10" ry="10" fill="#EEE8F6"/>
+              <g transform="translate(14, 6)">
+                <text x="0" y="10" font-family="Inter" font-size="10" fill="#6B6078">已停止</text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(552, 132)">
+            <rect width="248" height="220" rx="24" ry="24" fill="#FFFFFF"/>
+            <g transform="translate(16, 16)">
+              <rect width="216" height="116" rx="20" ry="20" fill="#F4F0E4"/>
+            </g>
+            <g transform="translate(32, 34)">
+              <rect width="58" height="14" rx="7" ry="7" fill="#FFFFFF"/>
+            </g>
+            <g transform="translate(32, 62)">
+              <rect width="92" height="10" rx="5" ry="5" fill="#DDD7BC"/>
+            </g>
+            <g transform="translate(32, 82)">
+              <rect width="76" height="10" rx="5" ry="5" fill="#ECE7D4"/>
+            </g>
+            <g transform="translate(158, 74)">
+              <rect width="58" height="42" rx="16" ry="16" fill="#DEE3DA"/>
+            </g>
+            <g transform="translate(16, 150)">
+              <text x="0" y="14" font-family="Inter" font-size="14" fill="#2D2435">Windows 98</text>
+            </g>
+            <g transform="translate(16, 174)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#857A90">Windows 98</text>
+            </g>
+            <g transform="translate(16, 192)">
+              <rect width="44" height="20" rx="10" ry="10" fill="#EEE8F6"/>
+              <g transform="translate(14, 6)">
+                <text x="0" y="10" font-family="Inter" font-size="10" fill="#6B6078">已停止</text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(0, 380)">
+            <rect width="248" height="220" rx="24" ry="24" fill="#FFFFFF"/>
+            <g transform="translate(16, 16)">
+              <rect width="216" height="116" rx="20" ry="20" fill="#F7EDE5"/>
+            </g>
+            <g transform="translate(32, 34)">
+              <rect width="58" height="14" rx="7" ry="7" fill="#FFFFFF"/>
+            </g>
+            <g transform="translate(32, 62)">
+              <rect width="92" height="10" rx="5" ry="5" fill="#E8D7C8"/>
+            </g>
+            <g transform="translate(32, 82)">
+              <rect width="76" height="10" rx="5" ry="5" fill="#F2E5DA"/>
+            </g>
+            <g transform="translate(158, 74)">
+              <rect width="58" height="42" rx="16" ry="16" fill="#F0D8C6"/>
+            </g>
+            <g transform="translate(16, 150)">
+              <text x="0" y="14" font-family="Inter" font-size="14" fill="#2D2435">Ubuntu Test</text>
+            </g>
+            <g transform="translate(16, 174)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#857A90">Linux Generic</text>
+            </g>
+            <g transform="translate(16, 192)">
+              <rect width="44" height="20" rx="10" ry="10" fill="#F3EEE9"/>
+              <g transform="translate(18, 6)">
+                <text x="0" y="10" font-family="Inter" font-size="10" fill="#826C5F">草稿</text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(276, 380)">
+            <rect width="248" height="220" rx="24" ry="24" fill="#FFFFFF"/>
+            <g transform="translate(16, 16)">
+              <rect width="216" height="116" rx="20" ry="20" fill="#EDF1F8"/>
+            </g>
+            <g transform="translate(32, 34)">
+              <rect width="58" height="14" rx="7" ry="7" fill="#FFFFFF"/>
+            </g>
+            <g transform="translate(32, 62)">
+              <rect width="92" height="10" rx="5" ry="5" fill="#D5DFEC"/>
+            </g>
+            <g transform="translate(32, 82)">
+              <rect width="76" height="10" rx="5" ry="5" fill="#E7EDF5"/>
+            </g>
+            <g transform="translate(158, 74)">
+              <rect width="58" height="42" rx="16" ry="16" fill="#CAD8EB"/>
+            </g>
+            <g transform="translate(16, 150)">
+              <text x="0" y="14" font-family="Inter" font-size="14" fill="#2D2435">Custom ARM</text>
+            </g>
+            <g transform="translate(16, 174)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#857A90">Custom</text>
+            </g>
+            <g transform="translate(16, 192)">
+              <rect width="44" height="20" rx="10" ry="10" fill="#F3EEE9"/>
+              <g transform="translate(18, 6)">
+                <text x="0" y="10" font-family="Inter" font-size="10" fill="#826C5F">草稿</text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(552, 380)">
+            <rect width="248" height="220" rx="24" ry="24" fill="#FFFFFF"/>
+            <g transform="translate(16, 16)">
+              <rect width="216" height="116" rx="20" ry="20" fill="#F2EBF7"/>
+            </g>
+            <g transform="translate(32, 34)">
+              <rect width="58" height="14" rx="7" ry="7" fill="#FFFFFF"/>
+            </g>
+            <g transform="translate(32, 62)">
+              <rect width="92" height="10" rx="5" ry="5" fill="#E1D1EA"/>
+            </g>
+            <g transform="translate(32, 82)">
+              <rect width="76" height="10" rx="5" ry="5" fill="#ECE1F2"/>
+            </g>
+            <g transform="translate(158, 74)">
+              <rect width="58" height="42" rx="16" ry="16" fill="#E2D3EA"/>
+            </g>
+            <g transform="translate(16, 150)">
+              <text x="0" y="14" font-family="Inter" font-size="14" fill="#2D2435">Recovery Disk</text>
+            </g>
+            <g transform="translate(16, 174)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#857A90">Custom</text>
+            </g>
+            <g transform="translate(16, 192)">
+              <rect width="44" height="20" rx="10" ry="10" fill="#F3EDF7"/>
+              <g transform="translate(14, 6)">
+                <text x="0" y="10" font-family="Inter" font-size="10" fill="#6B6078">未配置</text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,494 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useAppStore } from '../store/AppStore';
+import { useT } from '../hooks/useT';
+import { NoVncViewport } from '../components/NoVncViewport';
+import { usePresence } from '../hooks/usePresence';
+import { makeAudioHint, makeDisplayHint } from '../lib/machine';
+import { formatRuntimeBackend } from '../lib/console-session';
+
+/* ---- icons ---- */
+const ArrowLeftIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+    <line x1="19" y1="12" x2="5" y2="12" />
+    <polyline points="12 19 5 12 12 5" />
+  </svg>
+);
+
+const InfoCircleIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="16" x2="12" y2="12" />
+    <line x1="12" y1="8" x2="12.01" y2="8" />
+  </svg>
+);
+
+const DiskDriveIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="12" r="4" />
+    <line x1="12" y1="2" x2="12" y2="8" />
+    <line x1="12" y1="16" x2="12" y2="22" />
+    <line x1="2" y1="12" x2="8" y2="12" />
+    <line x1="16" y1="12" x2="22" y2="12" />
+  </svg>
+);
+
+const ResetIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+    <polyline points="1 4 1 10 7 10" />
+    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+  </svg>
+);
+
+const PowerIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+    <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+    <line x1="12" y1="2" x2="12" y2="12" />
+  </svg>
+);
+
+const PlayIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" width="20" height="20">
+    <polygon points="5 3 19 12 5 21 5 3" />
+  </svg>
+);
+
+const AlertIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
+  </svg>
+);
+
+const CloseIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);
+
+const MonitorIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+    <rect x="2" y="3" width="20" height="14" rx="2" />
+    <line x1="8" y1="21" x2="16" y2="21" />
+    <line x1="12" y1="17" x2="12" y2="21" />
+  </svg>
+);
+
+const SpeakerIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+  </svg>
+);
+
+const PowerStatusIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+  </svg>
+);
+
+// Stretch/Fill toggle icons
+const StretchIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M8 3v18M16 3v18M3 8h18M3 16h18" />
+  </svg>
+);
+
+const FitIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+    <rect x="5" y="5" width="14" height="14" rx="2" />
+    <path d="M9 9l3 3-3 3M15 9l-3 3 3 3" />
+  </svg>
+);
+
+/* ---- helpers ---- */
+function statusDot(status: string | undefined) {
+  if (status === 'running') return <span className="console-topbar__dot console-topbar__dot--running" />;
+  if (status === 'starting' || status === 'stopping') return <span className="console-topbar__dot console-topbar__dot--intermediate" />;
+  return <span className="console-topbar__dot" />;
+}
+
+function statusLabel(t: (key: string) => string, status: string | undefined) {
+  if (status === 'running') return t('console.states.running');
+  if (status === 'starting') return t('console.waitingConnection');
+  if (status === 'stopping') return t('console.states.disconnected');
+  return t('console.states.disconnected');
+}
+
+/* ---- main ---- */
+export function MachineConsolePage() {
+  const { machineId: rawMachineId } = useParams<{ machineId: string }>();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const t = useT();
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [terminateConfirmOpen, setTerminateConfirmOpen] = useState(false);
+  const [scaleMode, setScaleMode] = useState<'stretch' | 'fit'>('fit');
+  const infoDrawer = usePresence(infoOpen, 240);
+  const terminateModal = usePresence(terminateConfirmOpen);
+  const pathParam = searchParams.get('path') ?? undefined;
+
+  const {
+    draft,
+    recents,
+    openSakaByPath,
+    runtimeEnvironment,
+    getRuntimeStateForMachine,
+    runtimeMachines,
+    startMachine,
+    forceStopMachine,
+    settings
+  } = useAppStore();
+
+  const machineId = rawMachineId ? decodeURIComponent(rawMachineId) : '';
+
+  useEffect(() => {
+    if (pathParam && draft?.filePath !== pathParam) {
+      void openSakaByPath(pathParam);
+    }
+  }, [draft?.filePath, openSakaByPath, pathParam]);
+
+  const draftMatchesRoute = draft?.machine.id === machineId || (pathParam != null && draft?.filePath === pathParam);
+  const machine = draftMatchesRoute ? draft?.machine : undefined;
+  const machinePath = pathParam ?? (draftMatchesRoute ? draft?.filePath : undefined);
+
+  const runtimeState = useMemo(
+    () =>
+      getRuntimeStateForMachine(machineId) ??
+      runtimeMachines.find((entry) => entry.machineId === machineId) ??
+      (machinePath
+        ? runtimeMachines.find((entry) => entry.bundlePath === machinePath || entry.configPath === machinePath)
+        : undefined),
+    [getRuntimeStateForMachine, machineId, machinePath, runtimeMachines]
+  );
+  const recentEntry = useMemo(
+    () => recents.find((entry) => (machinePath ? entry.path === machinePath : false) || entry.id === machineId),
+    [machineId, machinePath, recents]
+  );
+  const machineTitle = machine?.title ?? recentEntry?.title ?? machineId;
+  const runtimeMachineId = runtimeState?.machineId ?? machineId;
+
+  useEffect(() => {
+    if (!runtimeState || !machinePath) return;
+    if (runtimeState.machineId === machineId) return;
+    navigate(`/machines/${encodeURIComponent(runtimeState.machineId)}/console?path=${encodeURIComponent(machinePath)}`, { replace: true });
+  }, [machineId, machinePath, navigate, runtimeState]);
+
+  const status = runtimeState?.status;
+  const hasError = status === 'stopped' && runtimeState?.lastError != null;
+  const qemuAvailable = runtimeEnvironment?.available ?? false;
+  const hasLiveConsole = status === 'running' && runtimeState?.displayBackend === 'vnc' && runtimeState?.displayWebSocketPort != null;
+
+  const displayHint = machine
+    ? makeDisplayHint(machine)
+    : runtimeState
+      ? formatRuntimeBackend(runtimeState)
+      : '—';
+
+  const audioHint = machine
+    ? makeAudioHint(machine.display.frontend, machine.display.sanaka?.backend ?? settings.runtimeDefaults.displayBackendHint, machine.advanced.audio_backend)
+    : t('common.disabled');
+
+  const handleStart = async () => {
+    if (!machinePath) return;
+    await startMachine(machinePath);
+  };
+
+  const handleStop = () => {
+    if (!runtimeMachineId) return;
+    setTerminateConfirmOpen(true);
+  };
+
+  const handleConfirmTerminate = async () => {
+    if (!runtimeMachineId) return;
+    setTerminateConfirmOpen(false);
+    await forceStopMachine(runtimeMachineId);
+  };
+
+  const handleReset = async () => {
+    if (!runtimeMachineId) return;
+    // Use backend atomic reset API instead of manual stop+start
+    await window.electronAPI.runtime.resetMachine({ machineId: runtimeMachineId, mode: 'hard' });
+  };
+
+  const handleChangeDisk = async () => {
+    if (!machinePath) return;
+    const result = await window.electronAPI.dialogs.pickIso();
+    if (result?.path) {
+      // 换盘入口：当前先保留交互结构；后端能力接好后替换实际换盘逻辑
+      console.log('ISO selected for disk swap:', result.path);
+    }
+  };
+
+  const handleBack = () => {
+    navigate('/');
+  };
+
+  return (
+    <div className="page page--console">
+      {/* Fixed top toolbar */}
+      <div className="console-topbar" role="toolbar" aria-label={t('console.title')}>
+        <div className="console-topbar__left">
+          <button
+            className="console-topbar__btn"
+            type="button"
+            onClick={handleBack}
+            title={t('app.back')}
+            aria-label={t('app.back')}
+          >
+            <ArrowLeftIcon />
+          </button>
+          <span className="console-topbar__title" title={machineTitle}>
+            {machineTitle}
+          </span>
+        </div>
+
+        <div className="console-topbar__center">
+          {statusDot(status)}
+          <span className="console-topbar__status-label">
+            {statusLabel(t, status)}
+          </span>
+        </div>
+
+        <div className="console-topbar__right">
+          <button
+            className="console-topbar__btn"
+            type="button"
+            onClick={() => setScaleMode((prev) => (prev === 'fit' ? 'stretch' : 'fit'))}
+            title={scaleMode === 'fit' ? t('console.scaleStretch') : t('console.scaleFit')}
+            aria-label={scaleMode === 'fit' ? t('console.scaleStretch') : t('console.scaleFit')}
+          >
+            {scaleMode === 'fit' ? <StretchIcon /> : <FitIcon />}
+          </button>
+          <button
+            className="console-topbar__btn"
+            type="button"
+            onClick={() => setInfoOpen(true)}
+            title={t('console.info')}
+            aria-label={t('console.info')}
+          >
+            <InfoCircleIcon />
+          </button>
+          <button
+            className="console-topbar__btn"
+            type="button"
+            onClick={handleChangeDisk}
+            title={t('console.changeDisk')}
+            aria-label={t('console.changeDisk')}
+          >
+            <DiskDriveIcon />
+          </button>
+          <button
+            className="console-topbar__btn"
+            type="button"
+            onClick={handleReset}
+            disabled={status !== 'running'}
+            title={t('console.reset')}
+            aria-label={t('console.reset')}
+          >
+            <ResetIcon />
+          </button>
+          <button
+            className="console-topbar__btn console-topbar__btn--danger"
+            type="button"
+            onClick={handleStop}
+            disabled={status !== 'running'}
+            title={t('console.close')}
+            aria-label={t('console.close')}
+          >
+            <PowerIcon />
+          </button>
+        </div>
+      </div>
+
+      {/* Fullscreen viewport */}
+      <div className="console-viewport">
+        {hasLiveConsole ? (
+          <NoVncViewport
+            active
+            machineRunning={status === 'running'}
+            websocketPort={runtimeState.displayWebSocketPort}
+            password={machine?.display.vnc?.password ?? ''}
+            reconnectWindowMs={15000}
+            scaleMode={scaleMode}
+          />
+        ) : status === 'starting' ? (
+          <div className="console-state">
+            <div className="console-state__spinner" />
+            <p className="console-state__text">{t('console.waitingConnection')}</p>
+            <p className="console-state__hint">{displayHint}</p>
+          </div>
+        ) : hasError ? (
+          <div className="console-state">
+            <div className="console-state__error-icon">
+              <AlertIcon />
+            </div>
+            <p className="console-state__text" style={{ color: 'rgba(255, 160, 160, 0.9)' }}>
+              {t('console.startFailed')}
+            </p>
+            <p className="console-state__hint">{runtimeState?.lastError}</p>
+            <button className="button button--ghost" type="button" onClick={handleStart} style={{ marginTop: '16px' }}>
+              {t('console.reconnect')}
+            </button>
+          </div>
+        ) : !qemuAvailable ? (
+          <div className="console-state">
+            <div className="console-state__error-icon">
+              <AlertIcon />
+            </div>
+            <p className="console-state__text">{t('common.qemuMissing')}</p>
+            {runtimeEnvironment?.installHint && (
+              <p className="console-state__hint">{runtimeEnvironment.installHint}</p>
+            )}
+          </div>
+        ) : (
+          <div className="console-state">
+            <p className="console-state__label">{t('console.states.disconnected')}</p>
+            <p className="console-state__hint">{displayHint}</p>
+            <button
+              className="console-start-btn"
+              type="button"
+              disabled={!qemuAvailable || !machinePath}
+              onClick={handleStart}
+              title={!qemuAvailable ? t('details.qemuMissingHint') : t('console.startHint')}
+            >
+              <PlayIcon />
+              <span>{t('console.reconnect')}</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Info drawer */}
+      {infoDrawer.mounted && (
+        <div className={infoDrawer.visible ? 'console-drawer-backdrop console-drawer-backdrop--visible' : 'console-drawer-backdrop'} role="presentation" onClick={() => setInfoOpen(false)}>
+          <aside
+            className={infoDrawer.visible ? 'console-drawer console-drawer--visible' : 'console-drawer'}
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('console.infoTitle')}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="console-drawer__header">
+              <h2 className="console-drawer__title">{t('console.infoTitle')}</h2>
+              <button
+                className="console-drawer__close"
+                type="button"
+                onClick={() => setInfoOpen(false)}
+                aria-label={t('app.close')}
+              >
+                <CloseIcon />
+              </button>
+            </div>
+
+            <div className="console-drawer__body spec-list">
+              <div className="spec-row">
+                <span className="spec-row__label">
+                  <span className="spec-row__icon"><MonitorIcon /></span>
+                  {t('console.protocol')}
+                </span>
+                <span className="spec-row__value">{displayHint}</span>
+              </div>
+              <div className="spec-row">
+                <span className="spec-row__label">
+                  <span className="spec-row__icon"><SpeakerIcon /></span>
+                  {t('console.audio')}
+                </span>
+                <span className="spec-row__value">{audioHint}</span>
+              </div>
+              <div className="spec-row">
+                <span className="spec-row__label">
+                  <span className="spec-row__icon"><PowerStatusIcon /></span>
+                  {t('console.connected')}
+                </span>
+                <span className="spec-row__value">
+                  {status === 'running'
+                    ? t('console.connectedRuntime')
+                    : status === 'starting'
+                      ? t('console.waitingConnection')
+                      : t('console.states.disconnected')}
+                </span>
+              </div>
+              {runtimeState && (
+                <>
+                  <div className="spec-row">
+                    <span className="spec-row__label">
+                      <span className="spec-row__icon"><MonitorIcon /></span>
+                      {t('details.runtimeDisplayBackend')}
+                    </span>
+                    <span className="spec-row__value">{formatRuntimeBackend(runtimeState)}</span>
+                  </div>
+                  <div className="spec-row">
+                    <span className="spec-row__label">
+                      <span className="spec-row__icon"><MonitorIcon /></span>
+                      {t('details.runtimeDisplayPort')}
+                    </span>
+                    <span className="spec-row__value">{String(runtimeState.displayPort)}</span>
+                  </div>
+                  {runtimeState.displayWebSocketPort != null && (
+                    <div className="spec-row">
+                      <span className="spec-row__label">
+                        <span className="spec-row__icon"><MonitorIcon /></span>
+                        {t('details.runtimeWebsocketPort')}
+                      </span>
+                      <span className="spec-row__value">{String(runtimeState.displayWebSocketPort)}</span>
+                    </div>
+                  )}
+                  {runtimeState.lastError && (
+                    <div className="spec-row" style={{ color: 'var(--danger)' }}>
+                      <span className="spec-row__label">
+                        <span className="spec-row__icon"><AlertIcon /></span>
+                        {t('details.runtimeLastError')}
+                      </span>
+                      <span className="spec-row__value">{runtimeState.lastError}</span>
+                    </div>
+                  )}
+                </>
+              )}
+              <div className="spec-row">
+                <span className="spec-row__label">
+                  <span className="spec-row__icon"><PowerStatusIcon /></span>
+                  {t('details.runtimeQemuStatus')}
+                </span>
+                <span className="spec-row__value">
+                  {qemuAvailable ? t('details.runtimeQemuAvailable') : t('details.runtimeQemuUnavailable')}
+                </span>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {terminateModal.mounted && (
+        <div className={terminateModal.visible ? 'modal-backdrop modal-backdrop--visible' : 'modal-backdrop'} role="presentation" onClick={() => setTerminateConfirmOpen(false)}>
+          <div
+            className={terminateModal.visible ? 'modal-card modal-card--visible' : 'modal-card'}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="terminate-confirm-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="terminate-confirm-title" style={{ color: 'var(--danger)', margin: '0 0 10px 0', fontSize: '1.25rem' }}>
+              {t('console.terminateTitle')}
+            </h2>
+            <p className="muted" style={{ margin: '0 0 24px 0', fontSize: '0.88rem', lineHeight: '1.5' }}>
+              {t('console.terminateConfirm')}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button className="button button--secondary" type="button" onClick={() => setTerminateConfirmOpen(false)}>
+                {t('app.cancel')}
+              </button>
+              <button className="button button--danger" type="button" onClick={handleConfirmTerminate}>
+                {t('app.confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

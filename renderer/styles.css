@@ -1,0 +1,772 @@
+@font-face { font-family: 'Montserrat'; src: url('../assets/fonts/Montserrat-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; unicode-range: U+0000-00FF; }
+@font-face { font-family: 'Montserrat'; src: url('../assets/fonts/Montserrat-Medium.ttf') format('truetype'); font-weight: 500; font-style: normal; font-display: swap; unicode-range: U+0000-00FF; }
+@font-face { font-family: 'Montserrat'; src: url('../assets/fonts/Montserrat-SemiBold.ttf') format('truetype'); font-weight: 600; font-style: normal; font-display: swap; unicode-range: U+0000-00FF; }
+@font-face { font-family: 'Montserrat'; src: url('../assets/fonts/Montserrat-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; unicode-range: U+0000-00FF; }
+:root {
+  --color-primary: #EDE7F6;
+  --color-on-surface: #1A1A1A;
+  --color-custom-button: var(--color-primary);
+
+.btn--custom-color {
+  background-color: var(--color-custom-button);
+  color: var(--color-on-primary);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn--custom-color:hover {
+  background-color: var(--color-primary-container);
+}
+  /* Material You 浅紫主题令牌 */
+  --color-primary: #9C6BFF;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #E9DDFF;
+  --color-on-primary-container: #2E006B;
+
+  --color-secondary: #625B71;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #E8DEF8;
+  --color-on-secondary-container: #1D192B;
+
+  --color-surface: #FFFBFE;
+  --color-on-surface: #1C1B1F;
+  --color-surface-variant: #E7E0EC;
+  --color-on-surface-variant: #49454F;
+  --color-outline: #79747E;
+  --color-error: #B3261E;
+  --color-on-error: #ffffff;
+
+  --elev-shadow-1: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  --elev-shadow-2: 0 4px 8px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.08);
+
+  --radius-full: 9999px; /* 药丸/全圆角 */
+  --focus-ring: 0 0 0 2px rgba(156, 107, 255, 0.4);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+
+  --btn-height: 48px; /* 默认按钮高度 48 */
+  
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+}
+
+/* 侧边抽屉 */
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 500px;
+  height: 100vh;
+  background: var(--color-surface);
+  box-shadow: var(--elev-shadow-3);
+  z-index: 100;
+  overflow-y: auto;
+  padding: var(--space-4);
+}
+
+/* 卡片适配 */
+.card {
+  width: calc(100% - 2 * var(--space-2));
+  margin: var(--space-2);
+  border-radius: 24px;
+  background: var(--color-surface-container-low);
+  padding: var(--space-4);
+}
+
+/* 输入控件适配 */
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+}
+
+/* 按钮组响应式布局 */
+.btn-group {
+  display: flex;
+  gap: var(--space-2);
+}
+
+@media (max-width: 1200px) {
+  .btn-group {
+    flex-direction: column;
+  }
+}
+
+/* 动态列表适配 */
+.dynamic-list {
+  width: 100%;
+}
+
+/* 磁盘配置模块 */
+.card--disk {
+  border-radius: 24px;
+  padding: var(--space-6);
+}
+
+.card--disk .card__title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: var(--space-6);
+}
+
+.card--disk .actions {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  display: flex;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.card--disk .btn--soft {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-6);
+  height: var(--btn-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  transition: all 0.2s ease;
+}
+
+.card--disk .btn--soft:hover {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.card--disk .btn--soft svg {
+  width: 18px;
+  height: 18px;
+}
+
+.card--disk .list--disks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.card--disk .note {
+  color: var(--color-on-surface-variant);
+  font-size: 0.875rem;
+  margin-top: var(--space-4);
+}
+
+/* 光盘镜像文件选择器 */
+.iso-file-picker {
+  display: flex;
+  align-items: center;
+  display: flex;
+  align-items: center;
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.btn--outline {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  border: none;
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-6);
+  height: var(--btn-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  transition: all 0.2s ease;
+}
+
+/* ---------------------------------- */
+/* 磁盘列表区域样式 */
+/* ---------------------------------- */
+.disk-list-area {
+  min-height: 120px; /* 列表为空时也保持可见 */
+  width: 100%;
+  border-radius: var(--radius-m);
+  padding: var(--space-3);
+  margin-bottom: var(--space-6); /* 与按钮组拉开距离 */
+  background-color: var(--color-surface);
+  display: flex; /* 启用居中布局 */
+  align-items: center; /* 垂直居中 */
+  justify-content: center; /* 水平居中 */
+}
+
+/* 空列表提示样式 */
+.disk-empty-hint {
+  color: var(--color-on-surface-variant);
+  font-size: 0.9em;
+  text-align: center;
+}
+
+/* 磁盘项样式 */
+.disk-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  margin-bottom: var(--space-2);
+}
+.disk-item__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.disk-item__del {
+  background: transparent;
+  border: none;
+  color: var(--color-on-primary-container);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.disk-item__del:hover {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.btn--outline:hover {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  box-shadow: var(--elev-shadow-1);
+}
+
+.file-path {
+  flex: 1;
+  padding: var(--space-3) var(--space-4);
+  border-radius: 12px;
+  background: var(--color-surface-variant);
+  color: var(--color-on-surface-variant);
+  min-height: var(--btn-height);
+  display: flex;
+  align-items: center;
+}
+
+/* 顶部栏 */
+.app-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-4);
+  background: var(--color-surface);
+  box-shadow: var(--elev-shadow-1);
+}
+.app-bar__title { font-size: 18px; font-weight: 600; }
+
+/* 容器 */
+.container {
+  padding: var(--space-6);
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: calc(100vh - 64px);
+}
+
+/* 空状态 */
+.disk-config {
+  padding: 16px;
+  background-color: var(--color-surface);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.disk-controls {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.disk-list {
+  border: none;
+  border-radius: 8px;
+  padding: 16px;
+  min-height: 100px;
+  background-color: var(--color-surface);
+}
+
+#disk-list-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.disk-config {
+  padding: 16px;
+  background-color: var(--color-surface);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.disk-controls {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.disk-list {
+  border: none;
+  border-radius: 8px;
+  padding: 16px;
+  min-height: 100px;
+  background-color: var(--color-surface);
+}
+
+#disk-list-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.empty-state { text-align: center; margin-top: 12vh; }
+.empty-state__icon { font-size: 48px; margin-bottom: var(--space-2); }
+.empty-state__title { font-size: 20px; margin: var(--space-2) 0; }
+.empty-state__desc { color: var(--color-on-surface-variant); margin: 0; }
+
+/* 通用按钮：默认药丸形状，高度 48 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--btn-height);
+  padding: 0 var(--space-6);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  cursor: pointer;
+  box-shadow: var(--elev-shadow-1);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+.btn:hover { filter: brightness(0.98); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: none; box-shadow: var(--elev-shadow-1), var(--focus-ring); }
+
+/* 药丸按钮：保证完全圆角与图标间距 */
+.btn--pill {
+  white-space: normal;
+  flex-shrink: 1;
+  min-width: 0;
+  white-space: normal;
+  border-radius: var(--radius-full) !important;
+  height: var(--btn-height);
+  padding-inline: var(--space-6);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap; /* 文本不换行，配合容器横向滚动 */
+}
+
+/* 图标按钮：48x48 正圆 */
+.icon-btn {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.icon-btn:hover { background: #e1d6ff; }
+.icon-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* FAB：右下角，圆形（56x56） */
+.fab {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right) + 8px);
+  bottom: max(16px, env(safe-area-inset-bottom) + 8px);
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--elev-shadow-2);
+  z-index: 24; /* 确保在主要内容之上 */
+}
+.fab--primary { background: var(--color-primary-container); color: var(--color-on-primary-container); }
+.fab--primary:hover { filter: brightness(0.98); }
+.fab--primary:active { transform: translateY(1px); }
+.fab--primary:focus-visible { outline: none; box-shadow: var(--elev-shadow-2), var(--focus-ring); }
+
+.fab img { pointer-events: none; }
+/* Android-like ripple effect for FAB */
+.fab { overflow: hidden; }
+.fab::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(156, 107, 255, 0.24);
+  opacity: 0;
+  transform: scale(0.2);
+  transition: opacity 200ms ease, transform 200ms ease;
+  pointer-events: none;
+}
+.fab:active::after { opacity: 1; transform: scale(1); }
+@media (prefers-reduced-motion: reduce) {
+  .fab::after { transition: none; }
+}
+
+/* 顶部栏动作区与关于卡片 */
+.app-bar__actions { display: flex; gap: 8px; }
+/* 右上角横向三点：无按钮形状 */
+.plain-icon-btn {
+  -webkit-tap-highlight-color: transparent;
+  background: transparent;
+  border: none;
+  padding: 6px;
+  margin: 0;
+  line-height: 0;
+  border-radius: 8px; /* 仅用于焦点可视环的圆角，不作为背景形状 */
+  color: var(--color-on-surface);
+  cursor: pointer;
+}
+.plain-icon-btn:hover { filter: brightness(0.92); }
+.plain-icon-btn:active { filter: brightness(0.88); }
+.plain-icon-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.about-card {
+  position: fixed;
+  top: 72px; /* 下移避免遮住 AppBar */
+  right: 24px;
+  min-width: 280px;
+  max-width: calc(100vw - 48px);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  border-radius: 16px;
+  box-shadow: var(--elev-shadow-2);
+  padding: 16px;
+  z-index: 20;
+  border: 1px solid var(--color-surface-variant);
+  text-align: center;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 200ms ease, transform 200ms ease;
+  pointer-events: none;
+}
+.about-card.about-card--open { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.about-card h2 { margin: 0 0 8px; font-size: 16px; }
+.about-card p { margin: 0 0 6px; font-size: 14px; color: var(--color-on-surface-variant); }
+.about-card__logo { display: block; margin: 0 auto 8px; width: 240px; height: 240px; object-fit: contain; clip-path: inset(2%); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* 抽屉与遮罩 */
+.backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.32); opacity: 0; transition: opacity 200ms ease; pointer-events: none; z-index: 15; }
+.backdrop.backdrop--open { opacity: 1; pointer-events: auto; }
+.drawer { position: fixed; top: 0; right: 0; height: 100%; width: 500px; background: var(--color-surface); color: var(--color-on-surface); box-shadow: var(--elev-shadow-2); border-left: 1px solid var(--color-surface-variant); transform: translateX(100%); transition: transform 240ms ease; z-index: 16; display: flex; flex-direction: column; border-radius: 24px 0 0 24px; overflow: hidden; }
+.drawer.drawer--open { transform: translateX(0); }
+.drawer__header { padding: 16px; border-bottom: 1px solid var(--color-surface-variant); display: flex; justify-content: space-between; align-items: center; }
+.drawer__header h2 { font-size: 18px; font-weight: 600; margin: 0; }
+.drawer__close { background: none; border: none; color: var(--color-on-surface); cursor: pointer; padding: 4px; }
+.drawer__body { padding: 16px; overflow: auto; }
+
+/* 提升“新建虚拟机”抽屉与遮罩的层级：抽屉 > 遮罩 > 其他（含 FAB） */
+#createDrawer { z-index: 1001; }
+#drawerBackdrop { z-index: 1000; }
+
+/* 抽屉内按钮适配更靠中布局：略微增大左右内边距，避免拥挤 */
+.drawer .btn { padding-inline: calc(var(--space-6) + 4px); min-height: var(--btn-height); }
+
+/* Material You 卡片样式（抽屉内表单模块） */
+.card { 
+  border-radius: 24px; 
+  background: var(--color-surface); 
+  color: var(--color-on-surface);
+  /* 极轻微层次感，移除多余装饰 */
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  border: 1px solid var(--color-surface-variant);
+  margin: var(--space-2); /* 8px */
+  padding: var(--space-6); /* 24px */
+}
+.card__title { 
+  text-align: center;
+  margin: 0 0 8px 0; 
+  font-size: 24px; 
+  font-weight: 700; 
+  color: var(--color-on-surface);
+}
+.card__content { 
+  display: grid; 
+  gap: var(--space-4); /* 16px，确保组件间呼吸空间 */
+}
+/* 禁用网络卡片时，除了启用开关行（.field--inline），其余内容不可点击 */
+.card.card--network.is-disabled .card__content > :not(.field--inline) { pointer-events: none; }
+
+
+
+/* 目标元素淡出 */
+
+
+/* 表单控件统一样式（Material Design 3，简洁中等圆角） */
+.field { display: grid; gap: 6px; }
+.field--inline { align-items: center; }
+.field label { font-size: 16px; color: var(--color-on-surface-variant); }
+select, input[type="text"], input[type="number"], input[type="password"], input[type="file"], textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-surface-variant);
+  background: #F6F6FA;
+  color: var(--color-on-surface);
+  box-shadow: none;
+  font-family: "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+select:focus, input:focus, textarea:focus { outline: none; box-shadow: var(--focus-ring); border-color: var(--color-primary); }
+
+/* note 文本块（仅作提示，不使用明显边框） */
+.note { 
+  padding: 8px 12px; 
+  border-radius: 8px; 
+  background: transparent; 
+  color: var(--color-on-surface-variant);
+}
+
+/* 列表与按钮组 */
+.list { list-style: none; padding: 0; margin: 0; }
+.list--disks { display: grid; gap: 8px; }
+.actions { display: flex; gap: 16px; flex-wrap: nowrap; }
+/* 磁盘配置动作区：强制单行展示三个按钮 */
+.card--disk .actions,
+.disk-controls.actions {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  flex-wrap: nowrap !important;
+  align-items: center;
+  gap: 12px;
+  overflow-x: auto; /* 小屏横向滚动而不是换行 */
+}
+.card--disk .actions > .btn { 
+  flex: 0 1 auto;
+  min-width: max-content;
+  white-space: normal;
+  text-align: center;
+}
+
+
+/* 伪开关布局（用于复选框的行内布局） */
+.switch { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
+.switch input[type="checkbox"] { width: 18px; height: 18px; }
+
+/* 条件字段分组（显示前端） */
+.field-group[hidden] { display: none !important; }
+
+/* 统一控件字体为 Montserrat */
+button, select, input, textarea, option, optgroup {
+  font-family: "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Material You 自定义下拉组件 */
+.dropdown { position: relative; }
+.dropdown__control {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-surface-variant);
+  background: #F6F6FA;
+  color: var(--color-on-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+}
+.dropdown__control:focus-visible { outline: none; box-shadow: var(--focus-ring); border-color: var(--color-primary); }
+.dropdown__icon { inline-size: 20px; block-size: 20px; flex: 0 0 20px; opacity: .72; }
+.dropdown__menu {
+  position: absolute;
+  z-index: 30;
+  inset-inline: 0;
+  margin-top: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-variant);
+  border-radius: 16px; /* Material You 大圆角 */
+  box-shadow: var(--elev-shadow-2);
+  padding: 6px;
+  max-height: min(320px, 50vh);
+  overflow: auto;
+  opacity: 0;
+  transform: scale(0.95);
+  transform-origin: top center;
+  transition: opacity 180ms ease, transform 180ms ease;
+  pointer-events: none;
+}
+.dropdown.dropdown--open .dropdown__menu {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dropdown__menu { transition: none; }
+}
+.dropdown__option {
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.dropdown__option:hover { background: rgba(156, 107, 255, 0.12); }
+.dropdown__option[aria-selected="true"],
+.dropdown__option:focus-visible { background: rgba(156, 107, 255, 0.18); outline: none; }
+
+/* ------------------------------------------- */
+/* 柔和 Material You 按钮样式 */
+/* ------------------------------------------- */
+.btn--soft-theme {
+  flex-basis: 0;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+  flex-grow: 1;
+  flex-shrink: 1;
+    background-color: #EDE7F6; /* 极浅薰衣草紫 */
+    color: #512da8; /* 深紫文本/图标色 */
+    border-radius: 12px; /* 中等圆角 */
+    padding: 10px 18px;
+    font-weight: 600;
+    transition: background-color 0.2s ease;
+}
+
+.btn--soft-theme:hover {
+    background-color: #D1C4E9;
+}
+
+/* 文件路径显示框样式 */
+.file-path {
+    background-color: #f5f5f5;
+    border-radius: 12px;
+    padding: 8px 12px;
+    margin-top: 8px;
+    font-size: 14px;
+    color: #333;
+}
+
+.iso-file-picker {
+  display: flex;
+  align-items: center;
+  display: flex;
+  align-items: center;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 12px;
+    min-width: 0; /* 允许子元素正确收缩 */
+}
+/* 路径显示区域自适应：单行省略，填满剩余空间 */
+.file-path-display {
+  flex-grow: 1;
+  flex-grow: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: var(--color-surface-variant);
+    color: var(--color-on-surface-variant);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    height: var(--btn-height);
+    display: flex;
+    align-items: center;
+}
+
+/* -------------------------------------------------- */
+/* Ripple 水波纹效果（Material Design 3 风格）       */
+/* -------------------------------------------------- */
+.has-ripple {
+  position: relative;
+  overflow: hidden; /* 确保涟漪不溢出 */
+}
+.has-ripple .ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.18; /* 基于 M3 的轻度语义强调 */
+  transform: scale(0);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.has-ripple .ripple.ripple--animate {
+  animation: ripple-expand-fade 450ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+@keyframes ripple-expand-fade {
+  0% { transform: scale(0); opacity: 0.24; }
+  50% { transform: scale(1); opacity: 0.20; }
+  100% { transform: scale(1.05); opacity: 0; }
+}
+
+/* 尊重用户的减少动态偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .has-ripple .ripple.ripple--animate { animation-duration: 1ms; }
+}
+
+/* 固定“添加虚拟机”FAB 于右下角，适配安全区域，层级优先 */
+.fab,
+#createToggle {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right) + 8px);
+  bottom: max(16px, env(safe-area-inset-bottom) + 8px);
+  z-index: 100; /* 高于普通内容与抽屉 */
+}
+
+/* 基本尺寸与交互（如项目已定义可省略） */
+.fab {
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--elev-shadow-2);
+  overflow: hidden; /* 配合涟漪效果 */
+}
+
+.card--network .card__content {
+  overflow: visible;
+  max-height: none;
+}

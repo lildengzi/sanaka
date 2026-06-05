@@ -1,0 +1,20 @@
+Sanaka
+Copyright (C) 2026 Sanakaprix
+
+Sanaka is distributed under the GNU General Public License, version 2 or,
+at your option, any later version. See the LICENSE file for details.
+
+This project includes or distributes third-party software, including:
+
+- QEMU, licensed under the GNU General Public License, version 2
+- Electron and related tooling, under their respective upstream licenses
+- noVNC and other frontend/runtime dependencies, under their respective upstream licenses
+
+When Sanaka is distributed with bundled QEMU binaries, the corresponding
+source and build scripts used for packaging must also be made available under
+the terms required by the GNU General Public License.
+
+Project name and product branding:
+
+- Product: Sanaka
+- Copyright holder / distributor name: Sanakaprix

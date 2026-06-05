@@ -1,0 +1,198 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AppStoreProvider } from '../store/AppStore';
+import { MachineBuilderPage } from './MachineBuilderPage';
+
+const runtimeEnvironment = {
+  available: true,
+  binaries: {
+    x86_64: { name: 'qemu-system-x86_64', found: true, path: '/usr/bin/qemu-system-x86_64', version: 'QEMU emulator version 9.0.0' },
+    aarch64: { name: 'qemu-system-aarch64', found: true, path: '/usr/bin/qemu-system-aarch64', version: 'QEMU emulator version 9.0.0' },
+    i386: { name: 'qemu-system-i386', found: true, path: '/usr/bin/qemu-system-i386', version: 'QEMU emulator version 9.0.0' },
+    arm: { name: 'qemu-system-arm', found: true, path: '/usr/bin/qemu-system-arm', version: 'QEMU emulator version 9.0.0' },
+    riscv64: { name: 'qemu-system-riscv64', found: true, path: '/usr/bin/qemu-system-riscv64', version: 'QEMU emulator version 9.0.0' },
+    ppc: { name: 'qemu-system-ppc', found: true, path: '/usr/bin/qemu-system-ppc', version: 'QEMU emulator version 9.0.0' },
+    ppc64: { name: 'qemu-system-ppc64', found: true, path: '/usr/bin/qemu-system-ppc64', version: 'QEMU emulator version 9.0.0' },
+    qemuImg: { name: 'qemu-img', found: true, path: '/usr/bin/qemu-img', version: 'QEMU emulator version 9.0.0' }
+  },
+  accelerators: ['hvf', 'tcg'],
+  availableSystemTargets: ['x86_64'],
+  checkedAt: new Date().toISOString(),
+  platform: 'darwin',
+  arch: 'arm64',
+  installHint: ''
+};
+
+function mockElectronApi() {
+  const createMachineBundle = vi.fn<Window['electronAPI']['files']['createMachineBundle']>(async () => ({
+    path: '/tmp/example.saka',
+    configPath: '/tmp/example.saka/machine.svm'
+  }));
+  window.electronAPI = {
+    files: {
+      openMachineBundle: vi.fn(async () => null),
+      openSaka: vi.fn(async () => null),
+      createMachineBundle,
+      readSaka: vi.fn(async () => null),
+      saveSaka: vi.fn(async () => ({ path: '/tmp/example.saka', configPath: '/tmp/example.saka/machine.svm' })),
+      saveSakaAs: vi.fn(async () => ({ path: '/tmp/example.saka', configPath: '/tmp/example.saka/machine.svm' })),
+      trashMachineBundle: vi.fn(async () => ({ ok: true as const })),
+      renamePath: vi.fn(async () => ({ ok: true as const })),
+      copyPath: vi.fn(async () => ({ ok: true as const })),
+      openPath: vi.fn(async () => ({ ok: true as const }))
+    },
+    dialogs: {
+      pickDisk: vi.fn(async () => null),
+      pickIso: vi.fn(async () => null)
+    },
+    disks: {
+      getInfo: vi.fn(async () => ({ path: '/tmp/disk.qcow2', format: 'qcow2' as const, virtualSize: 0, actualSize: 0 })),
+      create: vi.fn(async () => ({ ok: true, path: '/tmp/disk.qcow2' })),
+      prepareManaged: vi.fn(async () => ({ ok: true, path: '/tmp/example.saka/Disks/disk.qcow2', relativePath: 'Disks/disk.qcow2' })),
+      resize: vi.fn(async () => ({ ok: true, path: '/tmp/disk.qcow2' })),
+      convert: vi.fn(async () => ({ ok: true, path: '/tmp/disk-converted.qcow2' })),
+      reclaimSpace: vi.fn(async () => ({ ok: true, path: '/tmp/disk.qcow2', reclaimedBytes: 0 }))
+    },
+    settings: {
+      load: vi.fn(async () => null),
+      save: vi.fn(async (settings) => settings)
+    },
+    recents: {
+      list: vi.fn(async () => []),
+      push: vi.fn(async (entry) => [entry]),
+      remove: vi.fn(async () => [])
+    },
+    runtime: {
+      detectQemu: vi.fn(async () => runtimeEnvironment),
+      getRuntimeEnvironment: vi.fn(async () => runtimeEnvironment),
+      startMachine: vi.fn(async () => ({ ok: true })),
+      stopMachine: vi.fn(async () => ({ ok: true })),
+      forceStopMachine: vi.fn(async () => ({ ok: true })),
+      resetMachine: vi.fn(async () => ({ ok: true })),
+      changeMedia: vi.fn(async () => ({ ok: true })),
+      getMachineState: vi.fn(async () => null),
+      listRunningMachines: vi.fn(async () => []),
+      onRuntimeEvent: vi.fn(() => () => undefined)
+    },
+    app: {
+      getMetadata: vi.fn(async () => ({ name: 'Sanaka', version: '1.0.0', platform: 'darwin', arch: 'x64', userDataPath: '/tmp', documentsPath: '/tmp/Documents', defaultMachineDirectory: '/tmp/Documents/Sanaka' })),
+      openExternal: vi.fn(async () => ({ ok: true as const })),
+      onOpenSaka: vi.fn(() => () => undefined),
+      onOpenAbout: vi.fn(() => () => undefined),
+      onOpenSettings: vi.fn(() => () => undefined)
+    }
+  };
+  return { createMachineBundle };
+}
+
+describe('MachineBuilderPage', () => {
+  beforeEach(() => {
+    mockElectronApi();
+  });
+
+  it('syncs the summary when machine title changes', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AppStoreProvider>
+        <MemoryRouter initialEntries={['/machines/new']}>
+          <Routes>
+            <Route path="/machines/new" element={<MachineBuilderPage />} />
+          </Routes>
+        </MemoryRouter>
+      </AppStoreProvider>
+    );
+
+    const input = await screen.findByLabelText('虚拟机名称');
+    await user.clear(input);
+    await user.type(input, 'My Test Machine');
+
+    await waitFor(() => {
+      expect(screen.getByText('My Test Machine')).toBeInTheDocument();
+    });
+  });
+
+  it('defaults a new machine title to 新虚拟机', async () => {
+    render(
+      <AppStoreProvider>
+        <MemoryRouter initialEntries={['/machines/new']}>
+          <Routes>
+            <Route path="/machines/new" element={<MachineBuilderPage />} />
+          </Routes>
+        </MemoryRouter>
+      </AppStoreProvider>
+    );
+
+    expect(await screen.findByDisplayValue('新虚拟机')).toBeInTheDocument();
+  });
+
+  it('uses the unique machine name returned by the bundle creator', async () => {
+    const { createMachineBundle } = mockElectronApi();
+    createMachineBundle.mockResolvedValueOnce({
+      path: '/tmp/win11-2.saka',
+      configPath: '/tmp/win11-2.saka/machine.svm',
+      machineName: 'win11 2'
+    });
+    const user = userEvent.setup();
+
+    render(
+      <AppStoreProvider>
+        <MemoryRouter initialEntries={['/machines/new']}>
+          <Routes>
+            <Route path="/machines/new" element={<MachineBuilderPage />} />
+            <Route path="/machines/:machineId" element={<div>details</div>} />
+          </Routes>
+        </MemoryRouter>
+      </AppStoreProvider>
+    );
+
+    const input = await screen.findByLabelText('虚拟机名称');
+    await user.clear(input);
+    await user.type(input, 'win11');
+    await user.click(screen.getByRole('button', { name: '创建虚拟机' }));
+
+    await waitFor(() => {
+      expect(window.electronAPI.recents.push).toHaveBeenCalledWith(expect.objectContaining({ title: 'win11 2' }));
+    });
+  });
+
+  it('renders editable memory and cpu fields', async () => {
+    render(
+      <AppStoreProvider>
+        <MemoryRouter initialEntries={['/machines/new']}>
+          <Routes>
+            <Route path="/machines/new" element={<MachineBuilderPage />} />
+          </Routes>
+        </MemoryRouter>
+      </AppStoreProvider>
+    );
+
+    expect(await screen.findByLabelText('内存')).toBeInTheDocument();
+    expect(screen.getByLabelText('CPU 核心')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '机器类型' })).toBeInTheDocument();
+  });
+
+  it('limits accelerator choices to the host-compatible options', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AppStoreProvider>
+        <MemoryRouter initialEntries={['/machines/new']}>
+          <Routes>
+            <Route path="/machines/new" element={<MachineBuilderPage />} />
+          </Routes>
+        </MemoryRouter>
+      </AppStoreProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: '加速方式' }));
+
+    expect(screen.getByRole('option', { name: 'TCG' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'KVM' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'HVF' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'WHPX' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'HAX' })).not.toBeInTheDocument();
+  });
+});

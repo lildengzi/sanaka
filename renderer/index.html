@@ -1,0 +1,378 @@
+<!doctype html>
+<!--
+  index.html - 主页面文件
+  功能：
+    1. 定义应用程序的基本结构和布局
+    2. 包含国际化支持（通过 data-i18n 属性）
+    3. 加载外部资源（CSS 和 JavaScript）
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sanaka · QEMU 虚拟机管理器</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="./ripple.js"></script>
+</head>
+<body>
+  <header class="app-bar" role="banner">
+    <div class="app-bar__title">Sanaka</div>
+    <div class="app-bar__actions">
+      <!-- 关于按钮：点击展开关于卡片 -->
+      <button class="plain-icon-btn" id="aboutToggle" aria-expanded="false" aria-controls="aboutCard" aria-label="关于 Sanaka">
+        <img src="../assets/icons/more_horiz.svg" alt="关于 Sanaka" width="24" height="24" />
+      </button>
+
+    </div>
+  </header>
+
+  <main class="container" role="main">
+    <section class="empty-state" aria-live="polite">
+      <div class="empty-state__icon"><img src="../assets/icons/monitor.svg" alt="显示器" width="56" height="56"/></div>
+      <h1 class="empty-state__title">还没有虚拟机</h1>
+      <p class="empty-state__desc">点击右下角的按钮添加你的第一个虚拟机</p>
+    </section>
+  </main>
+
+  <button class="fab fab--primary" id="createToggle" aria-label="添加虚拟机" title="添加虚拟机" aria-controls="createDrawer">
+    <img src="../assets/icons/plus.svg" alt="添加虚拟机" width="24" height="24" />
+  </button>
+
+  <div class="about-card" id="aboutCard" role="dialog" aria-modal="false" aria-labelledby="aboutTitle" hidden>
+    <img src="../assets/icons/logo.svg" alt="Sanaka" width="240" height="240" class="about-card__logo" />
+    <div id="menu-about-entry" hidden></div>
+    <h2 id="aboutTitle">关于 Sanaka</h2>
+    <p>轻量 QEMU 管理界面 · 版本 1.0 Beta</p>
+    <p>Sanakaprix 2025</p>
+  </div>
+
+  <div class="backdrop" id="drawerBackdrop" hidden></div>
+  <aside class="drawer" id="createDrawer" role="dialog" aria-modal="true" aria-labelledby="createTitle" hidden>
+    <header class="drawer__header">
+      <h2 id="createTitle">新建虚拟机</h2>
+
+      </button>
+    </header>
+    <div class="drawer__body">
+      
+      <section class="card card--info" aria-labelledby="card-info-title">
+        <h3 id="card-info-title" class="card__title">信息</h3>
+        <div class="card__content">
+          <div class="field">
+            <label for="vm-name">虚拟机名称</label>
+            <input type="text" id="vm-name" placeholder="例如：Windows 11 Dev" />
+          </div>
+          <div class="field">
+            <label for="vm-notes">注释 (可选)</label>
+            <textarea id="vm-notes" rows="3" placeholder="为该虚拟机添加备注..."></textarea>
+          </div>
+        </div>
+      </section>
+
+      <section class="card card--base" aria-labelledby="card-base-title">
+        <h3 id="card-base-title" class="card__title">基础配置</h3>
+        <div class="card__content">
+          
+          <div class="field">
+            <label for="dd-os-template">操作系统 (模版)</label>
+            <!-- 操作系统模板下拉菜单：用于选择虚拟机的操作系统模板 -->
+            <div class="dropdown" data-name="os-template">
+              <button class="dropdown__control" id="dd-os-template" aria-haspopup="listbox" aria-expanded="false" role="combobox" aria-controls="dd-os-template-list">
+                <span class="dropdown__value">请选择</span>
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+              </button>
+              <div class="dropdown__menu" id="dd-os-template-list" role="listbox">
+                <div class="dropdown__option" role="option" data-value="" aria-selected="true">请选择</div>
+                <div class="dropdown__option" role="option" data-value="win98" aria-selected="false">Windows 98</div>
+                <div class="dropdown__option" role="option" data-value="win10" aria-selected="false">Windows 10/11</div>
+                <div class="dropdown__option" role="option" data-value="linux" aria-selected="false">Linux (Generic)</div>
+              </div>
+              <input type="hidden" id="os-template-input" name="os-template" value="" />
+            </div>
+          </div>
+          <div class="note config-note" id="os-hint" aria-live="polite">
+            Windows 98 系统不建议使用超过 1024 MB RAM。
+          </div>
+
+          <div class="field">
+            <label for="dd-arch">QEMU 架构</label>
+            <div class="dropdown" data-name="arch">
+              <button class="dropdown__control" id="dd-arch" aria-haspopup="listbox" aria-expanded="false" role="combobox" aria-controls="dd-arch-list">
+                <span class="dropdown__value">x86_64</span>
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+              </button>
+              <div class="dropdown__menu" id="dd-arch-list" role="listbox">
+                <div class="dropdown__option" role="option" data-value="x86_64" aria-selected="true">x86_64</div>
+                <div class="dropdown__option" role="option" data-value="arm" aria-selected="false">arm</div>
+                <div class="dropdown__option" role="option" data-value="aarch64" aria-selected="false">aarch64</div>
+                <div class="dropdown__option" role="option" data-value="riscv64" aria-selected="false">riscv64</div>
+                <div class="dropdown__option" role="option" data-value="i386" aria-selected="false">i386</div>
+                <div class="dropdown__option" role="option" data-value="ppc" aria-selected="false">ppc</div>
+                <div class="dropdown__option" role="option" data-value="ppc64" aria-selected="false">ppc64</div>
+              </div>
+              <input type="hidden" id="arch-input" name="arch" value="x86_64" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="dd-boot-order">第一启动方式</label>
+            <div class="dropdown" data-name="boot-order">
+              <button class="dropdown__control" id="dd-boot-order" aria-haspopup="listbox" aria-expanded="false" role="combobox" aria-controls="dd-boot-order-list">
+                <span class="dropdown__value">默认</span>
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+              </button>
+              <div class="dropdown__menu" id="dd-boot-order-list" role="listbox">
+                <div class="dropdown__option" role="option" data-value="none" aria-selected="true">默认</div>
+                <div class="dropdown__option" role="option" data-value="cdrom" aria-selected="false">光盘</div>
+                <div class="dropdown__option" role="option" data-value="disk" aria-selected="false">硬盘</div>
+                <div class="dropdown__option" role="option" data-value="floppy" aria-selected="false">软盘</div>
+              </div>
+              <input type="hidden" id="boot-order-input" name="boot-order" value="none" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="iso-file-path">光盘镜像 (文件选择)</label>
+            <!-- 文件选择器：用于选择光盘镜像文件（ISO 或 IMG 格式） -->
+            <div class="file-picker-group">
+                <button class="btn btn--pill btn--custom-color" id="btn-iso-picker" type="button">
+                    <img src="../assets/icons/folder.svg" alt="选择文件" width="20" height="20" />
+                    选择文件
+                </button>
+                <input type="text" id="iso-file-path" readonly placeholder="未选择任何文件" />
+                <input type="file" id="isoFileInput" accept=".iso,.img" style="display: none;" />
+            </div>
+          </div>
+          
+          <div class="field">
+            <label for="dd-sound-card">声卡</label>
+            <div class="dropdown" data-name="sound-card">
+              <button class="dropdown__control" id="dd-sound-card" aria-haspopup="listbox" aria-expanded="false" role="combobox" aria-controls="dd-sound-card-list">
+                <span class="dropdown__value">intel-hda (默认)</span>
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+              </button>
+              <div class="dropdown__menu" id="dd-sound-card-list" role="listbox">
+                <div class="dropdown__option" role="option" data-value="ac97" aria-selected="false">AC97</div>
+                <div class="dropdown__option" role="option" data-value="adlib" aria-selected="false">adlib</div>
+                <div class="dropdown__option" role="option" data-value="cs4231a" aria-selected="false">cs4231a</div>
+                <div class="dropdown__option" role="option" data-value="es1370" aria-selected="false">ES1370</div>
+                <div class="dropdown__option" role="option" data-value="gus" aria-selected="false">gus</div>
+                <div class="dropdown__option" role="option" data-value="hda-duplex" aria-selected="false">hda-duplex</div>
+                <div class="dropdown__option" role="option" data-value="hda-micro" aria-selected="false">hda-micro</div>
+                <div class="dropdown__option" role="option" data-value="hda-output" aria-selected="false">hda-output</div>
+                <div class="dropdown__option" role="option" data-value="ich9-intel-hda" aria-selected="false">ich9-intel-hda</div>
+                <div class="dropdown__option" role="option" data-value="intel-hda" aria-selected="true">intel-hda (默认)</div>
+                <div class="dropdown__option" role="option" data-value="sb16" aria-selected="false">sb16</div>
+                <div class="dropdown__option" role="option" data-value="usb-audio" aria-selected="false">usb-audio</div>
+                <div class="dropdown__option" role="option" data-value="virtio-sound-device" aria-selected="false">virtio-sound-device</div>
+                <div class="dropdown__option" role="option" data-value="virtio-sound-pci" aria-selected="false">virtio-sound-pci</div>
+              </div>
+              <input type="hidden" id="sound-card-input" name="sound-card" value="intel-hda" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="dd-accelerator">虚拟机加速设置</label>
+            <div class="dropdown" data-name="accelerator">
+              <button class="dropdown__control" id="dd-accelerator" aria-haspopup="listbox" aria-expanded="false" role="combobox" aria-controls="dd-accelerator-list">
+                <span class="dropdown__value">tcg（默认、全部兼容）</span>
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+              </button>
+              <div class="dropdown__menu" id="dd-accelerator-list" role="listbox">
+                <div class="dropdown__option" role="option" data-value="tcg" aria-selected="true">tcg（默认、全部兼容）</div>
+                <div class="dropdown__option" role="option" data-value="kvm" aria-selected="false">kvm（Linux）</div>
+                <div class="dropdown__option" role="option" data-value="hax" aria-selected="false">hax（Windows）</div>
+                <div class="dropdown__option" role="option" data-value="whpx" aria-selected="false">whpx（Windows）</div>
+                <div class="dropdown__option" role="option" data-value="hvf" aria-selected="false">hvf（macOS）</div>
+              </div>
+              <input type="hidden" id="accelerator-input" name="accelerator" value="tcg" />
+            </div>
+          </div>
+          
+        </div>
+      </section>
+
+      <section class="card card--disk" aria-labelledby="card-disk-title">
+        <h3 id="card-disk-title" class="card__title">磁盘配置</h3>
+        <div class="card__content">
+          <div id="disk-list-container" class="disk-list-area"></div>
+          <div class="actions">
+            <button id="add-disk-btn" class="btn btn--soft" type="button" aria-label="添加磁盘">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="18" height="18"><path fill="currentColor" d="M12 5c.552 0 1 .448 1 1v5h5c.552 0 1 .448 1 1s-.448 1-1 1h-5v5c0 .552-.448 1-1 1s-1-.448-1-1v-5H6c-.552 0-1-.448-1-1s.448-1 1-1h5V6c0-.552.448-1 1-1z"/></svg>
+              <span>添加磁盘</span>
+            </button>
+          </div>
+          <p class="note">最多允许配置 4 个硬盘 (不含光驱)。删除仅移除配置引用，不会物理删除文件。</p>
+        </div>
+      </section>
+
+      <section class="card card--network" aria-labelledby="card-network-title">
+        <h3 id="card-network-title" class="card__title">网络</h3>
+        <div class="card__content">
+            
+            <div class="field field--inline">
+                <label class="switch">
+                    <input type="checkbox" id="network-enable" checked />
+                    <span>启用网络</span>
+                </label>
+            </div>
+
+            <div class="field">
+                <label for="dd-network-mode">网络模式</label>
+                <div class="dropdown" data-name="network-mode">
+                    <button class="dropdown__control" id="dd-network-mode" aria-haspopup="listbox" aria-expanded="false" role="combobox" aria-controls="dd-network-mode-list">
+                        <span class="dropdown__value">User (用户模式)</span>
+                        <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+                    </button>
+                    <div class="dropdown__menu" id="dd-network-mode-list" role="listbox">
+                        <div class="dropdown__option" role="option" data-value="user" aria-selected="true">User (用户模式)</div>
+                        <div class="dropdown__option" role="option" data-value="bridge" aria-selected="false">Bridge (桥接模式)</div>
+                    </div>
+                    <input type="hidden" id="network-mode-input" name="network-mode" value="user" />
+                </div>
+            </div>
+
+            <div class="field">
+                <label for="dd-network-card">网卡类型</label>
+                <div class="dropdown" data-name="network-card">
+                    <button class="dropdown__control" id="dd-network-card" aria-haspopup="listbox" aria-expanded="false" role="combobox" aria-controls="dd-network-card-list">
+                        <span class="dropdown__value">virtio-net-pci (aka virtio)</span>
+                        <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+                    </button>
+                    <div class="dropdown__menu" id="dd-network-card-list" role="listbox">
+                        <div class="dropdown__option" role="option" data-value="e1000" aria-selected="false">e1000</div>
+                        <div class="dropdown__option" role="option" data-value="ne2k_pci" aria-selected="false">ne2k_pci</div>
+                        <div class="dropdown__option" role="option" data-value="pcnet" aria-selected="false">pcnet</div>
+                        <div class="dropdown__option" role="option" data-value="rtl8139" aria-selected="false">rtl8139</div>
+                        <div class="dropdown__option" role="option" data-value="e1000-82544gc" aria-selected="false">e1000-82544gc</div>
+                        <div class="dropdown__option" role="option" data-value="e1000-82545em" aria-selected="false">e1000-82545em</div>
+                        <div class="dropdown__option" role="option" data-value="e1000e" aria-selected="false">e1000e</div>
+                        <div class="dropdown__option" role="option" data-value="i82550" aria-selected="false">i82550</div>
+                        <div class="dropdown__option" role="option" data-value="i82551" aria-selected="false">i82551</div>
+                        <div class="dropdown__option" role="option" data-value="i82557a" aria-selected="false">i82557a</div>
+                        <div class="dropdown__option" role="option" data-value="i82557b" aria-selected="false">i82557b</div>
+                        <div class="dropdown__option" role="option" data-value="i82557c" aria-selected="false">i82557c</div>
+                        <div class="dropdown__option" role="option" data-value="i82558a" aria-selected="false">i82558a</div>
+                        <div class="dropdown__option" role="option" data-value="i82558b" aria-selected="false">i82558b</div>
+                        <div class="dropdown__option" role="option" data-value="i82559a" aria-selected="false">i82559a</div>
+                        <div class="dropdown__option" role="option" data-value="i82559b" aria-selected="false">i82559b</div>
+                        <div class="dropdown__option" role="option" data-value="i82559c" aria-selected="false">i82559c</div>
+                        <div class="dropdown__option" role="option" data-value="i82559er" aria-selected="false">i82559er</div>
+                        <div class="dropdown__option" role="option" data-value="i82562" aria-selected="false">i82562</div>
+                        <div class="dropdown__option" role="option" data-value="i82801" aria-selected="false">i82801</div>
+                        <div class="dropdown__option" role="option" data-value="igb" aria-selected="false">igb</div>
+                        <div class="dropdown__option" role="option" data-value="ne2k_isa" aria-selected="false">ne2k_isa</div>
+                        <div class="dropdown__option" role="option" data-value="tulip" aria-selected="false">tulip</div>
+                        <div class="dropdown__option" role="option" data-value="virtio-net-pci" aria-selected="true">virtio-net-pci (aka virtio)</div>
+                        <div class="dropdown__option" role="option" data-value="virtio-net-pci-non-transitional" aria-selected="false">virtio-net-pci-non-transitional</div>
+                        <div class="dropdown__option" role="option" data-value="virtio-net-pci-transitional" aria-selected="false">virtio-net-pci-transitional</div>
+                        <div class="dropdown__option" role="option" data-value="vmxnet3" aria-selected="false">vmxnet3</div>
+                    </div>
+                    <input type="hidden" id="network-card-input" name="network-card" value="virtio-net-pci" />
+                </div>
+            </div>
+            
+        </div>
+      </section>
+      
+      <section class="card card--display" aria-labelledby="card-display-title">
+        <h3 id="card-display-title" class="card__title">显示</h3>
+        <div class="card__content">
+            
+            <div class="field">
+                <label for="dd-gpu-model">显卡选择</label>
+                <div class="dropdown" data-name="gpu-model">
+                    <button class="dropdown__control" id="dd-gpu-model" aria-haspopup="listbox" aria-expanded="false" role="combobox" aria-controls="dd-gpu-model-list">
+                        <span class="dropdown__value">virtio-vga</span>
+                        <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+                    </button>
+                    <div class="dropdown__menu" id="dd-gpu-model-list" role="listbox">
+                        <div class="dropdown__option" role="option" data-value="ati-vga" aria-selected="false">ati-vga</div>
+                        <div class="dropdown__option" role="option" data-value="bochs-display" aria-selected="false">bochs-display</div>
+                        <div class="dropdown__option" role="option" data-value="cirrus-vga" aria-selected="false">cirrus-vga</div>
+                        <div class="dropdown__option" role="option" data-value="isa-cirrus-vga" aria-selected="false">isa-cirrus-vga</div>
+                        <div class="dropdown__option" role="option" data-value="isa-vga" aria-selected="false">isa-vga</div>
+                        <div class="dropdown__option" role="option" data-value="ramfb" aria-selected="false">ramfb</div>
+                        <div class="dropdown__option" role="option" data-value="secondary-vga" aria-selected="false">secondary-vga</div>
+                        <div class="dropdown__option" role="option" data-value="VGA" aria-selected="false">VGA</div>
+                        <div class="dropdown__option" role="option" data-value="virtio-gpu-device" aria-selected="false">virtio-gpu-device</div>
+                        <div class="dropdown__option" role="option" data-value="virtio-gpu-pci" aria-selected="false">virtio-gpu-pci</div>
+                        <div class="dropdown__option" role="option" data-value="virtio-vga" aria-selected="true">virtio-vga</div>
+                        <div class="dropdown__option" role="option" data-value="vmware-svga" aria-selected="false">vmware-svga</div>
+                    </div>
+                    <input type="hidden" id="gpu-model-input" name="gpu-model" value="virtio-vga" />
+                </div>
+            </div>
+
+            <div class="field">
+                <label for="dd-display-frontend">显示前端</label>
+                <div class="dropdown" data-name="display-frontend">
+                    <button class="dropdown__control" id="dd-display-frontend" aria-haspopup="listbox" aria-expanded="false" role="combobox" aria-controls="dd-display-frontend-list">
+                        <span class="dropdown__value">Spice (默认)</span>
+                        <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+                    </button>
+                    <div class="dropdown__menu" id="dd-display-frontend-list" role="listbox">
+                        <div class="dropdown__option" role="option" data-value="spice" aria-selected="true">Spice (默认)</div>
+                        <div class="dropdown__option" role="option" data-value="vnc" aria-selected="false">VNC</div>
+                        <div class="dropdown__option" role="option" data-value="sanaka" aria-selected="false">Sanaka (Beta)</div>
+                    </div>
+                    <input type="hidden" id="display-frontend-input" name="display-frontend" value="spice" />
+                </div>
+            </div>
+            
+            <div id="display-config-extras" class="card__content--conditional">
+                <div class="field field--spice">
+                    <label for="spice-port">Spice 端口</label>
+                    <input type="number" id="spice-port" placeholder="例如：5900" />
+                </div>
+                <div class="field field--vnc" style="display: none;">
+                    <label for="vnc-port">VNC 端口</label>
+                    <input type="number" id="vnc-port" placeholder="例如：5901" />
+                </div>
+                <div class="field field--vnc" style="display: none;">
+                    <label for="vnc-pass">VNC 密码</label>
+                    <input type="password" id="vnc-pass" placeholder="若为空则禁用密码、若有字则启用密码" />
+                </div>
+                <div class="field field--sanaka" style="display: none;">
+                    <div class="note">Sanaka (Beta) 暂无额外配置项。</div>
+                </div>
+            </div>
+            
+        </div>
+      </section>
+
+      <section class="card card--peripherals" aria-labelledby="card-peripherals-title">
+        <h3 id="card-peripherals-title" class="card__title">外部设备</h3>
+        <div class="card__content">
+          <div class="field field--inline">
+            <label class="switch">
+              <input type="checkbox" id="usb-tablet" />
+              <span>启用 USB-tablet 鼠标</span>
+            </label>
+          </div>
+          <div class="note">
+              （其他内容之后再写）
+          </div>
+        </div>
+      </section>
+
+      <section class="card card--advanced" aria-labelledby="card-advanced-title">
+        <h3 id="card-advanced-title" class="card__title">高级选项</h3>
+        <div class="card__content">
+          <div class="field">
+            <label for="custom-qemu-args">自定义 QEMU 参数</label>
+            <textarea id="custom-qemu-args" rows="5" placeholder="-vga std -device intel-hda …"></textarea>
+          </div>
+        </div>
+      </section>
+      
+    </div>
+    <footer class="drawer__footer">
+      
+    </footer>
+  </aside>
+
+  <script src="./dropdown.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

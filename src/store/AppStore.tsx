@@ -1,0 +1,934 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { defaultSettings } from '../domain/defaults';
+import {
+  appSettingsSchema,
+  recentEntrySchema,
+  type AppSettings,
+  type DiskImageFormat,
+  type MachineDraft,
+  type RecentEntry,
+  type SakaMachine,
+  type SakaTemplate,
+  type TemplateCatalogEntry
+} from '../domain/schemas';
+import type { RuntimeMachineState } from '../types/electron';
+import { builtInTemplates, createMachineFromTemplate, createMachineFromTemplateDocument, normalizeMachineCompatibility } from '../domain/templates';
+import { resources } from '../i18n/resources';
+import { makeRecentEntry } from '../lib/machine';
+import { parseSakaContent, sanitizeMachineName, serializeSakaMachine } from '../lib/saka';
+
+function normalizeSettingsForMainline(settings: AppSettings): AppSettings {
+  return {
+    ...settings,
+    runtimeDefaults: {
+      ...settings.runtimeDefaults,
+      displayFrontend: 'sanaka',
+      displayBackendHint: 'vnc'
+    },
+    templateCatalog: settings.templateCatalog.map((entry) => ({
+      ...entry,
+      label: entry.key === 'win11' && entry.label === 'Windows 10/11' ? 'Windows 10' : entry.label,
+      defaultFrontend: 'sanaka'
+    }))
+  };
+}
+
+export function getUniqueMachineTitle(title: string, existingTitles: string[]): string {
+  const normalizedExisting = existingTitles.map(t => t.trim().toLowerCase());
+  if (!normalizedExisting.includes(title.trim().toLowerCase())) {
+    return title;
+  }
+  const match = title.match(/^(.*?)\s+(\d+)$/);
+  let base = title;
+  let startIdx = 2;
+  if (match) {
+    const candidateBase = match[1];
+    const numStr = match[2];
+    const num = parseInt(numStr, 10);
+    if (numStr.length === 1 || normalizedExisting.includes(candidateBase.trim().toLowerCase())) {
+      base = candidateBase;
+      startIdx = num;
+    }
+  }
+  let index = startIdx;
+  while (normalizedExisting.includes(`${base} ${index}`.trim().toLowerCase())) {
+    index++;
+  }
+  return `${base} ${index}`;
+}
+
+export function getDefaultNewMachineTitle(existingTitles: string[]): string {
+  const base = '新虚拟机';
+  const normalizedExisting = existingTitles.map((title) => title.trim().toLowerCase());
+
+  if (!normalizedExisting.includes(base.toLowerCase())) {
+    return base;
+  }
+
+  let index = 1;
+  while (normalizedExisting.includes(`${base} ${index}`.toLowerCase())) {
+    index += 1;
+  }
+
+  return `${base} ${index}`;
+}
+
+function inferDiskFormatFromPath(filePath: string): DiskImageFormat {
+  const ext = filePath.split('.').pop()?.toLowerCase() || 'raw';
+  const formatMap: Record<string, DiskImageFormat> = {
+    qcow2: 'qcow2',
+    qed: 'qed',
+    qcow: 'qcow',
+    vmdk: 'vmdk',
+    vhd: 'vpc',
+    vpc: 'vpc',
+    vdi: 'vdi',
+    img: 'raw',
+    raw: 'raw'
+  };
+  return formatMap[ext] || 'raw';
+}
+
+function buildManagedDiskFileName(disk: SakaMachine['disks'][number]) {
+  const fileName = disk.path.split(/[/\\]/).pop() || disk.id;
+  return fileName.replace(/^Disks[/\\]/, '');
+}
+
+async function materializeManagedDisks(machine: SakaMachine, bundlePath: string) {
+  const nextMachine = structuredClone(machine);
+
+  for (let index = 0; index < nextMachine.disks.length; index += 1) {
+    const disk = nextMachine.disks[index];
+    if (disk.storage_mode !== 'managed' || !disk.pending_create) {
+      continue;
+    }
+
+    const fileName = buildManagedDiskFileName(disk);
+    const lastDot = fileName.lastIndexOf('.');
+    const name = lastDot > 0 ? fileName.slice(0, lastDot) : fileName;
+    const format = disk.format || inferDiskFormatFromPath(fileName);
+    const result = await window.electronAPI.disks.prepareManaged({
+      bundlePath,
+      diskId: disk.id,
+      name,
+      size: disk.pending_create.size,
+      unit: disk.pending_create.unit,
+      format
+    });
+
+    if (!result.ok || !result.relativePath) {
+      throw new Error(result.error || 'Failed to create the managed disk image.');
+    }
+
+    nextMachine.disks[index] = {
+      ...disk,
+      path: result.relativePath,
+      format,
+      storage_mode: 'managed',
+      source_path: '',
+      pending_create: undefined
+    };
+  }
+
+  return nextMachine;
+}
+
+function hasPendingManagedDisks(machine: SakaMachine) {
+  return machine.disks.some((disk) => disk.storage_mode === 'managed' && disk.pending_create);
+}
+
+interface ActivityItem {
+  id: string;
+  title: string;
+  description: string;
+  time: string;
+}
+
+interface AppStoreValue {
+  ready: boolean;
+  settings: AppSettings;
+  recents: RecentEntry[];
+  draft: MachineDraft | null;
+  appMeta: Awaited<ReturnType<typeof window.electronAPI.app.getMetadata>> | null;
+  aboutOpen: boolean;
+  activity: ActivityItem[];
+  messages: Record<string, unknown>;
+  templates: TemplateCatalogEntry[];
+  initialize: () => Promise<void>;
+  setLanguage: (language: AppSettings['language']) => Promise<void>;
+  setAboutOpen: (open: boolean) => void;
+  createDraftFromTemplateKey: (templateKey: string) => Promise<void>;
+  applyTemplateSelection: (templateKey: string) => Promise<void>;
+  updateDraft: (updater: (machine: SakaMachine) => SakaMachine) => void;
+  saveDraft: (mode?: 'save' | 'saveAs', overrideTitle?: string) => Promise<string | null>;
+  openSakaByPath: (filePath: string) => Promise<{ kind: 'machine' | 'template'; machineId: string; path?: string } | null>;
+  openSakaDialog: () => Promise<{ kind: 'machine' | 'template'; machineId: string; path?: string } | null>;
+  persistSettings: (next: AppSettings) => Promise<void>;
+  importTemplateFromDialog: () => Promise<void>;
+  updateTemplateCatalog: (updater: (catalog: TemplateCatalogEntry[]) => TemplateCatalogEntry[]) => Promise<void>;
+  createDraftFromDisk: () => Promise<{ machineId: string } | null>;
+  deleteMachine: (machinePath: string) => Promise<boolean>;
+  runtimeEnvironment: Awaited<ReturnType<typeof window.electronAPI.runtime.getRuntimeEnvironment>> | null;
+  runtimeMachines: Awaited<ReturnType<typeof window.electronAPI.runtime.listRunningMachines>>;
+  runningMachines: string[];
+  getRuntimeStateForMachine: (machineId: string) => RuntimeMachineState | undefined;
+  startMachine: (machinePath: string) => Promise<boolean>;
+  stopMachine: (id: string) => Promise<boolean>;
+  forceStopMachine: (id: string) => Promise<boolean>;
+  transition: { active: boolean; type: 'launch' | 'console' | 'delete' };
+  triggerTransition: (type: 'launch' | 'console' | 'delete', action: () => void | Promise<void>) => void;
+  deleteTarget: { path: string; title: string } | null;
+  setDeleteTarget: (target: { path: string; title: string } | null) => void;
+  startError: { title: string; description: string; detail?: string } | null;
+  setStartError: (target: { title: string; description: string; detail?: string } | null) => void;
+  renameMachine: (machinePath: string, newTitle: string) => Promise<boolean>;
+  duplicateMachine: (machinePath: string) => Promise<boolean>;
+}
+
+const AppStoreContext = createContext<AppStoreValue | null>(null);
+
+function makeActivity(title: string, description: string): ActivityItem {
+  return {
+    id: `act-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    title,
+    description,
+    time: new Date().toISOString()
+  };
+}
+
+function formatStartError(language: AppSettings['language'], error: string) {
+  return {
+    title: language === 'zh-CN' ? '启动失败' : 'Start Failed',
+    description: language === 'zh-CN' ? '无法启动虚拟机。下面是 QEMU 返回的原始错误。' : 'Could not start the virtual machine. The raw QEMU error is shown below.',
+    detail: error || undefined
+  };
+}
+
+async function readTemplateByKey(settings: AppSettings, templateKey: string) {
+  const builtIn = builtInTemplates.find((template) => template.template.key === templateKey);
+  if (builtIn) return builtIn;
+  const imported = settings.templateCatalog.find((entry) => entry.key === templateKey && entry.source === 'imported' && entry.path);
+  if (!imported?.path) return null;
+  const opened = await window.electronAPI.files.readSaka(imported.path);
+  if (!opened) return null;
+  const parsed = parseSakaContent(opened.content);
+  return parsed.kind === 'template' ? parsed : null;
+}
+
+export function AppStoreProvider({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+  const [recents, setRecents] = useState<RecentEntry[]>([]);
+  const [draft, setDraft] = useState<MachineDraft | null>(null);
+  const [appMeta, setAppMeta] = useState<Awaited<ReturnType<typeof window.electronAPI.app.getMetadata>> | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [runtimeEnvironment, setRuntimeEnvironment] = useState<Awaited<ReturnType<typeof window.electronAPI.runtime.getRuntimeEnvironment>> | null>(null);
+  const [runtimeMachines, setRuntimeMachines] = useState<Awaited<ReturnType<typeof window.electronAPI.runtime.listRunningMachines>>>([]);
+  const [transition, setTransition] = useState<{ active: boolean; type: 'launch' | 'console' | 'delete' }>({ active: false, type: 'launch' });
+  const [deleteTarget, setDeleteTarget] = useState<{ path: string; title: string } | null>(null);
+  const [startError, setStartError] = useState<{ title: string; description: string; detail?: string } | null>(null);
+
+  const initialize = useCallback(async () => {
+    const [loadedSettings, loadedRecents, meta, environment, machines] = await Promise.all([
+      window.electronAPI.settings.load(),
+      window.electronAPI.recents.list(),
+      window.electronAPI.app.getMetadata(),
+      window.electronAPI.runtime.getRuntimeEnvironment(),
+      window.electronAPI.runtime.listRunningMachines()
+    ]);
+
+    const parsedSettings = appSettingsSchema.safeParse(loadedSettings).success ? normalizeSettingsForMainline(appSettingsSchema.parse(loadedSettings)) : defaultSettings;
+    const nextSettings = parsedSettings.defaultSaveDirectory
+      ? parsedSettings
+      : {
+          ...parsedSettings,
+          defaultSaveDirectory: meta.defaultMachineDirectory
+        };
+    const nextRecents = recentEntrySchema.array().safeParse(loadedRecents).success ? recentEntrySchema.array().parse(loadedRecents) : [];
+    if (nextSettings.defaultSaveDirectory !== parsedSettings.defaultSaveDirectory) {
+      await window.electronAPI.settings.save(nextSettings);
+    }
+    setSettings(nextSettings);
+    setRecents(nextRecents);
+    setAppMeta(meta);
+    setRuntimeEnvironment(environment);
+    setRuntimeMachines(machines);
+    if (meta.platform === 'darwin') {
+      document.body.classList.add('platform-darwin');
+    }
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    void initialize();
+  }, [initialize]);
+
+  useEffect(() => {
+    const runtimeApi = window.electronAPI.runtime;
+    if (!runtimeApi) {
+      return () => undefined;
+    }
+
+    const dispose = runtimeApi.onRuntimeEvent((event) => {
+      if (event.environment) {
+        setRuntimeEnvironment(event.environment);
+      }
+
+      if (event.state) {
+        const nextState = event.state;
+        setRuntimeMachines((current) => {
+          const others = current.filter((item) => item.machineId !== nextState.machineId);
+          // Keep stopped machines in the list so UI can show "stopped" status correctly
+          // Remove only after a delay to allow UI to reflect the final state
+          if (nextState.status === 'stopped') {
+            // Keep stopped state for 3 seconds then remove
+            setTimeout(() => {
+              setRuntimeMachines((latest) =>
+                latest.filter((item) => item.machineId !== nextState.machineId || item.status !== 'stopped')
+              );
+            }, 3000);
+          }
+          return [...others, nextState].sort((left, right) => left.machineId.localeCompare(right.machineId));
+        });
+      }
+    });
+
+    return () => {
+      dispose();
+    };
+  }, []);
+
+  const persistSettings = useCallback(async (next: AppSettings) => {
+    const parsed = normalizeSettingsForMainline(appSettingsSchema.parse(next));
+    setSettings(parsed);
+    await window.electronAPI.settings.save(parsed);
+  }, []);
+
+  const setLanguage = useCallback(
+    async (language: AppSettings['language']) => {
+      await persistSettings({ ...settings, language });
+    },
+    [persistSettings, settings]
+  );
+
+  const pushRecent = useCallback(async (entry: RecentEntry) => {
+    const next = (await window.electronAPI.recents.push(entry)) as RecentEntry[];
+    const parsed = recentEntrySchema.array().parse(next);
+    setRecents(parsed);
+  }, []);
+
+  const createDraftFromTemplateKey = useCallback(async (templateKey: string) => {
+    const template = await readTemplateByKey(settings, templateKey);
+    const machine = template ? createMachineFromTemplateDocument(template) : createMachineFromTemplate(templateKey);
+    const existingTitles = recents.map((r) => r.title);
+    machine.title = getDefaultNewMachineTitle(existingTitles);
+    setDraft({ machine, dirty: true });
+    setActivity((current) => [
+      makeActivity(
+        settings.language === 'zh-CN' ? '已创建草稿' : 'Draft Created',
+        settings.language === 'zh-CN' ? `已从 ${machine.template.label} 创建新的虚拟机。` : `Started a new machine from ${machine.template.label}.`
+      ),
+      ...current
+    ]);
+  }, [settings, recents]);
+
+  const applyTemplateSelection = useCallback(
+    async (templateKey: string) => {
+      const template = await readTemplateByKey(settings, templateKey);
+      if (!template || !draft) return;
+      const nextMachine = createMachineFromTemplateDocument(template);
+      nextMachine.title = draft.machine.title || nextMachine.title;
+      nextMachine.meta.notes = draft.machine.meta.notes;
+      setDraft({ ...draft, machine: nextMachine, dirty: true });
+      setActivity((current) => [
+        makeActivity(
+          settings.language === 'zh-CN' ? '已更新模板' : 'Template Updated',
+          settings.language === 'zh-CN' ? `已切换到 ${template.template.label} 模板。` : `Switched the current draft to ${template.template.label}.`
+        ),
+        ...current
+      ]);
+    },
+    [draft, settings]
+  );
+
+  const updateDraft = useCallback((updater: (machine: SakaMachine) => SakaMachine) => {
+    setDraft((current) => {
+      if (!current) return current;
+      const nextMachine = updater(structuredClone(current.machine));
+      nextMachine.updated_at = new Date().toISOString();
+      return {
+        ...current,
+        machine: nextMachine,
+        dirty: true
+      };
+    });
+  }, []);
+
+  const saveDraft = useCallback(
+    async (mode: 'save' | 'saveAs' = 'save', overrideTitle?: string) => {
+      if (!draft) return null;
+      try {
+        const machineToSave = overrideTitle
+          ? { ...draft.machine, title: overrideTitle }
+          : draft.machine;
+        const initialContent = serializeSakaMachine(machineToSave);
+        const initialResult =
+          mode === 'saveAs'
+            ? await window.electronAPI.files.saveSakaAs(sanitizeMachineName(machineToSave), initialContent)
+            : draft.filePath && !draft.legacySingleFile
+              ? await window.electronAPI.files.saveSaka(draft.filePath, initialContent)
+              : await window.electronAPI.files.createMachineBundle({
+                  machineName: machineToSave.title,
+                  fallbackName: machineToSave.id,
+                  content: initialContent
+                });
+        if (!initialResult?.path) return null;
+
+        const materializedMachine = await materializeManagedDisks(machineToSave, initialResult.path);
+        const titleAfterSave = initialResult.machineName ?? materializedMachine.title;
+        const updatedMachine = {
+          ...materializedMachine,
+          title: titleAfterSave,
+          updated_at: new Date().toISOString()
+        };
+        const needsFinalRewrite =
+          hasPendingManagedDisks(machineToSave) ||
+          titleAfterSave !== machineToSave.title;
+        const finalResult = needsFinalRewrite
+          ? await window.electronAPI.files.saveSaka(initialResult.path, serializeSakaMachine(updatedMachine))
+          : initialResult;
+
+        const nextDraft = {
+          filePath: finalResult.path,
+          configPath: finalResult.configPath,
+          previewPath: draft.previewPath,
+          legacySingleFile: false,
+          dirty: false,
+          machine: updatedMachine
+        };
+        setDraft(nextDraft);
+        await pushRecent(makeRecentEntry(updatedMachine, finalResult.path, draft.previewPath));
+        setActivity((current) => [
+          makeActivity(
+            settings.language === 'zh-CN' ? '已保存虚拟机' : 'Machine Saved',
+            settings.language === 'zh-CN' ? '虚拟机已保存。' : 'Machine saved.'
+          ),
+          ...current
+        ]);
+        return finalResult.path;
+      } catch (error) {
+        setActivity((current) => [
+          makeActivity(
+            settings.language === 'zh-CN' ? '保存失败' : 'Save Failed',
+            error instanceof Error
+              ? error.message
+              : settings.language === 'zh-CN'
+                ? '无法保存当前虚拟机。'
+                : 'Could not save the current machine.'
+          ),
+          ...current
+        ]);
+        return null;
+      }
+    },
+    [draft, pushRecent, settings.language]
+  );
+
+  const openSakaPayload = useCallback(
+    async (opened: Awaited<ReturnType<typeof window.electronAPI.files.readSaka>> | null) => {
+      if (!opened) return null;
+      const parsed = parseSakaContent(opened.content);
+      if (parsed.kind === 'template') {
+        const existing = settings.templateCatalog.find((entry) => entry.key === parsed.template.key);
+        if (!existing) {
+          const nextSettings = {
+            ...settings,
+            templateCatalog: [
+              ...settings.templateCatalog,
+              {
+                key: parsed.template.key,
+                label: parsed.template.label,
+                source: 'imported' as const,
+                enabled: true,
+                order: settings.templateCatalog.length,
+                defaultFrontend: 'sanaka' as const,
+                path: opened.path
+              }
+            ]
+          };
+          await persistSettings(nextSettings);
+        }
+        const machine = createMachineFromTemplateDocument(parsed);
+        const existingTitles = recents.map((r) => r.title);
+        machine.title = getDefaultNewMachineTitle(existingTitles);
+        setDraft({ machine, dirty: true });
+        setActivity((current) => [
+          makeActivity(
+            settings.language === 'zh-CN' ? '已打开模板' : 'Template Opened',
+            settings.language === 'zh-CN' ? `已从 ${parsed.title} 创建新的虚拟机草稿。` : `Started a new machine draft from ${parsed.title}.`
+          ),
+          ...current
+        ]);
+        return { kind: 'template' as const, machineId: machine.id, path: opened.path };
+      }
+      const normalizedMachine = normalizeMachineCompatibility(parsed);
+      setDraft({
+        machine: normalizedMachine,
+        filePath: opened.path,
+        configPath: opened.configPath,
+        previewPath: opened.previewPath,
+        legacySingleFile: opened.legacySingleFile,
+        dirty: false
+      });
+      setActivity((current) => [
+        makeActivity(
+          settings.language === 'zh-CN' ? '已打开虚拟机' : 'Machine Opened',
+          settings.language === 'zh-CN' ? `已打开 ${normalizedMachine.title}。` : `Opened ${normalizedMachine.title}.`
+        ),
+        ...current
+      ]);
+      await pushRecent(makeRecentEntry(normalizedMachine, opened.path, opened.previewPath));
+      return { kind: 'machine' as const, machineId: normalizedMachine.id, path: opened.path };
+    },
+    [persistSettings, pushRecent, settings, recents]
+  );
+
+  const openSakaByPath = useCallback(
+    async (filePath: string) => {
+      const opened = await window.electronAPI.files.readSaka(filePath);
+      return openSakaPayload(opened);
+    },
+    [openSakaPayload]
+  );
+
+  const openSakaDialog = useCallback(async () => openSakaPayload(await window.electronAPI.files.openMachineBundle()), [openSakaPayload]);
+
+  const importTemplateFromDialog = useCallback(async () => {
+    const opened = await window.electronAPI.files.openSaka();
+    if (!opened) return;
+    const parsed = parseSakaContent(opened.content);
+    if (parsed.kind !== 'template') return;
+    const existing = settings.templateCatalog.find((entry) => entry.key === parsed.template.key);
+    const catalog = existing
+      ? settings.templateCatalog.map((entry) =>
+          entry.key === parsed.template.key
+            ? { ...entry, label: parsed.template.label, source: 'imported' as const, path: opened.path }
+            : entry
+        )
+      : [
+          ...settings.templateCatalog,
+          {
+            key: parsed.template.key,
+            label: parsed.template.label,
+            source: 'imported' as const,
+            enabled: true,
+            order: settings.templateCatalog.length,
+            defaultFrontend: 'sanaka' as const,
+            path: opened.path
+          }
+        ];
+    await persistSettings({ ...settings, templateCatalog: catalog });
+    setActivity((current) => [
+      makeActivity(
+        settings.language === 'zh-CN' ? '已导入模板' : 'Template Imported',
+        settings.language === 'zh-CN' ? `已导入 ${parsed.title}。` : `Imported ${parsed.title}.`
+      ),
+      ...current
+    ]);
+  }, [persistSettings, settings]);
+
+  const updateTemplateCatalog = useCallback(
+    async (updater: (catalog: TemplateCatalogEntry[]) => TemplateCatalogEntry[]) => {
+      const next = updater(structuredClone(settings.templateCatalog));
+      await persistSettings({ ...settings, templateCatalog: next.map((item, index) => ({ ...item, order: index })) });
+    },
+    [persistSettings, settings]
+  );
+
+  const createDraftFromDisk = useCallback(async () => {
+    const picked = await window.electronAPI.dialogs.pickDisk();
+    if (!picked?.path) return null;
+    const machine = createMachineFromTemplate('custom');
+    const fallbackTitle = settings.language === 'zh-CN' ? '已导入磁盘' : 'Imported Disk';
+    const fileName = picked.path.split(/[/\\]/).pop() ?? fallbackTitle;
+    const title = fileName.replace(/\.[^.]+$/, '') || fallbackTitle;
+    const existingTitles = recents.map((r) => r.title);
+    machine.title = getUniqueMachineTitle(title, existingTitles);
+    machine.description = settings.language === 'zh-CN' ? '从现有磁盘镜像创建。' : 'Created from an existing disk image.';
+    machine.disks = [
+      {
+        id: `disk-${Date.now()}`,
+        path: picked.path,
+        format: inferDiskFormatFromPath(picked.path),
+        interface: 'virtio',
+        boot: true,
+        readonly: false,
+        storage_mode: 'external',
+        source_path: ''
+      }
+    ];
+    setDraft({ machine, dirty: true });
+    setActivity((current) => [
+      makeActivity(
+        settings.language === 'zh-CN' ? '已导入磁盘' : 'Disk Imported',
+        settings.language === 'zh-CN' ? `已从 ${machine.title} 创建新的虚拟机草稿。` : `Started a new machine draft from ${machine.title}.`
+      ),
+      ...current
+    ]);
+    return { machineId: machine.id };
+  }, [settings.language, recents]);
+
+  const deleteMachine = useCallback(
+    async (machinePath: string) => {
+      if (!machinePath) return false;
+      try {
+        await window.electronAPI.files.trashMachineBundle(machinePath);
+        const next = (await window.electronAPI.recents.remove(machinePath)) as RecentEntry[];
+        const parsed = recentEntrySchema.array().parse(next);
+        setRecents(parsed);
+        setDraft((current) => (current?.filePath === machinePath ? null : current));
+        setActivity((current) => [
+          makeActivity(
+            settings.language === 'zh-CN' ? '已删除虚拟机' : 'Machine Deleted',
+            settings.language === 'zh-CN' ? '虚拟机已移到废纸篓。' : 'Machine moved to the trash.'
+          ),
+          ...current
+        ]);
+        return true;
+      } catch {
+        setActivity((current) => [
+          makeActivity(
+            settings.language === 'zh-CN' ? '删除失败' : 'Delete Failed',
+            settings.language === 'zh-CN'
+              ? '无法移动到废纸篓，请确认这台虚拟机是否仍存在。'
+              : 'Could not move this machine to the trash. Check whether it still exists.'
+          ),
+          ...current
+        ]);
+        return false;
+      }
+    },
+    [settings.language]
+  );
+
+  const startMachine = useCallback(
+    async (machinePath: string) => {
+      if (!machinePath) return false;
+      setStartError(null);
+      let resolvedMachinePath = machinePath;
+
+      if (draft?.filePath === machinePath && draft.dirty) {
+        const savedPath = await saveDraft('save');
+        if (!savedPath) {
+          setActivity((current) => [
+            makeActivity(
+              settings.language === 'zh-CN' ? '启动失败' : 'Start Failed',
+              settings.language === 'zh-CN' ? '无法先保存当前虚拟机配置。' : 'Could not save the current machine configuration before starting.'
+            ),
+            ...current
+          ]);
+          return false;
+        }
+        resolvedMachinePath = savedPath;
+      }
+
+      const result = await window.electronAPI.runtime.startMachine(resolvedMachinePath);
+      if (result.state) {
+        const nextState = result.state;
+        setRuntimeMachines((current) => {
+          const others = current.filter((item) => item.machineId !== nextState.machineId);
+          if (nextState.status === 'stopped') {
+            return others;
+          }
+          return [...others, nextState];
+        });
+      }
+      if (!result.ok && result.error) {
+        setStartError(formatStartError(settings.language, result.error));
+        setActivity((current) => [
+          makeActivity(
+            settings.language === 'zh-CN' ? '启动失败' : 'Start Failed',
+            result.error ?? (settings.language === 'zh-CN' ? '无法启动虚拟机。' : 'Could not start the virtual machine.')
+          ),
+          ...current
+        ]);
+      }
+      return result.ok;
+    },
+    [draft?.dirty, draft?.filePath, saveDraft, settings.language]
+  );
+
+  const stopMachine = useCallback(
+    async (id: string) => {
+      const result = await window.electronAPI.runtime.stopMachine(id);
+      if (!result.ok && result.error) {
+        setActivity((current) => [
+          makeActivity(
+            settings.language === 'zh-CN' ? '关机失败' : 'Stop Failed',
+            result.error ?? (settings.language === 'zh-CN' ? '无法关闭虚拟机。' : 'Could not stop the virtual machine.')
+          ),
+          ...current
+        ]);
+      }
+      return result.ok;
+    },
+    [settings.language]
+  );
+
+  const forceStopMachine = useCallback(
+    async (id: string) => {
+      const result = await window.electronAPI.runtime.forceStopMachine(id);
+      if (result.ok) {
+        setRuntimeMachines((current) => current.filter((item) => item.machineId !== id));
+      }
+      if (!result.ok && result.error) {
+        setActivity((current) => [
+          makeActivity(
+            settings.language === 'zh-CN' ? '强制停止失败' : 'Force Stop Failed',
+            result.error ?? (settings.language === 'zh-CN' ? '无法强制停止虚拟机。' : 'Could not force stop the virtual machine.')
+          ),
+          ...current
+        ]);
+      }
+      return result.ok;
+    },
+    [settings.language]
+  );
+
+  const triggerTransition = useCallback((type: 'launch' | 'console' | 'delete', action: () => void | Promise<void>) => {
+    setTransition({ active: true, type });
+    setTimeout(() => {
+      void Promise.resolve(action()).catch(() => undefined);
+    }, 450);
+    setTimeout(() => {
+      setTransition({ active: false, type: 'launch' });
+    }, 1000);
+  }, []);
+
+  const renameMachine = useCallback(
+    async (machinePath: string, newTitle: string) => {
+      if (!machinePath || !newTitle.trim()) return false;
+      try {
+        const sanitized = newTitle.trim();
+        const opened = await window.electronAPI.files.readSaka(machinePath);
+        if (!opened) return false;
+        const parsed = parseSakaContent(opened.content) as SakaMachine;
+        parsed.title = sanitized;
+        const content = serializeSakaMachine(parsed);
+
+        const parentDir = machinePath.substring(0, Math.max(machinePath.lastIndexOf('/'), machinePath.lastIndexOf('\\')));
+        const newFolderName = process.platform === 'darwin' ? `${sanitized}.saka` : sanitized;
+        const newPath = `${parentDir}/${newFolderName}`;
+
+        let finalPath = machinePath;
+        if (newPath !== machinePath) {
+          await window.electronAPI.files.renamePath(machinePath, newPath);
+          finalPath = newPath;
+        }
+
+        await window.electronAPI.files.saveSaka(finalPath, content);
+
+        const updatedRecents = recents.map((item) => {
+          if (item.path === machinePath) {
+            return {
+              ...item,
+              title: sanitized,
+              path: finalPath,
+              updatedAt: new Date().toISOString()
+            };
+          }
+          return item;
+        });
+        setRecents(updatedRecents);
+
+        await window.electronAPI.recents.push({
+          id: parsed.id,
+          title: sanitized,
+          path: finalPath,
+          kind: 'machine',
+          templateLabel: parsed.template.label,
+          updatedAt: new Date().toISOString(),
+          status: 'saved'
+        });
+
+        setDraft((current) => {
+          if (current && current.filePath === machinePath) {
+            return {
+              ...current,
+              filePath: finalPath,
+              configPath: `${finalPath}/machine.svm`,
+              machine: {
+                ...current.machine,
+                title: sanitized
+              }
+            };
+          }
+          return current;
+        });
+
+        setActivity((current) => [
+          makeActivity(
+            settings.language === 'zh-CN' ? '已重命名虚拟机' : 'Machine Renamed',
+            settings.language === 'zh-CN' ? `虚拟机已重命名为 ${sanitized}。` : `Machine renamed to ${sanitized}.`
+          ),
+          ...current
+        ]);
+
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [recents, settings.language]
+  );
+
+  const duplicateMachine = useCallback(
+    async (machinePath: string) => {
+      if (!machinePath) return false;
+      try {
+        const opened = await window.electronAPI.files.readSaka(machinePath);
+        if (!opened) return false;
+        const parsed = parseSakaContent(opened.content) as SakaMachine;
+
+        const existingTitles = recents.map((r) => r.title);
+        const duplicateTitle = getUniqueMachineTitle(`${parsed.title} Copy`, existingTitles);
+
+        parsed.title = duplicateTitle;
+        parsed.id = `machine-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+        const content = serializeSakaMachine(parsed);
+
+        const parentDir = machinePath.substring(0, Math.max(machinePath.lastIndexOf('/'), machinePath.lastIndexOf('\\')));
+        const newFolderName = process.platform === 'darwin' ? `${duplicateTitle}.saka` : duplicateTitle;
+        const newPath = `${parentDir}/${newFolderName}`;
+
+        await window.electronAPI.files.copyPath(machinePath, newPath);
+        await window.electronAPI.files.saveSaka(newPath, content);
+
+        const entry = {
+          id: parsed.id,
+          title: duplicateTitle,
+          path: newPath,
+          kind: 'machine' as const,
+          templateLabel: parsed.template.label,
+          updatedAt: new Date().toISOString(),
+          status: 'saved' as const
+        };
+
+        const nextRecents = (await window.electronAPI.recents.push(entry)) as RecentEntry[];
+        setRecents(nextRecents);
+
+        setActivity((current) => [
+          makeActivity(
+            settings.language === 'zh-CN' ? '已复制虚拟机' : 'Machine Duplicated',
+            settings.language === 'zh-CN' ? `已复制虚拟机副本 ${duplicateTitle}。` : `Machine duplicated as ${duplicateTitle}.`
+          ),
+          ...current
+        ]);
+
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [recents, settings.language]
+  );
+
+  const runningMachines = useMemo(
+    () => runtimeMachines.filter((entry) => entry.status === 'running' || entry.status === 'starting').map((entry) => entry.machineId),
+    [runtimeMachines]
+  );
+
+  const getRuntimeStateForMachine = useCallback(
+    (machineId: string): RuntimeMachineState | undefined => runtimeMachines.find((entry) => entry.machineId === machineId),
+    [runtimeMachines]
+  );
+
+  const value = useMemo<AppStoreValue>(
+    () => ({
+      ready,
+      settings,
+      recents,
+      draft,
+      appMeta,
+      aboutOpen,
+      activity,
+      messages: resources[settings.language],
+      templates: [...settings.templateCatalog].sort((a, b) => a.order - b.order),
+      initialize,
+      setLanguage,
+      setAboutOpen,
+      createDraftFromTemplateKey,
+      applyTemplateSelection,
+      updateDraft,
+      saveDraft,
+      openSakaByPath,
+      openSakaDialog,
+      persistSettings,
+      importTemplateFromDialog,
+      updateTemplateCatalog,
+      createDraftFromDisk,
+      deleteMachine,
+      runtimeEnvironment,
+      runtimeMachines,
+      runningMachines,
+      getRuntimeStateForMachine,
+      startMachine,
+      stopMachine,
+      forceStopMachine,
+      transition,
+      triggerTransition,
+      deleteTarget,
+      setDeleteTarget,
+      startError,
+      setStartError,
+      renameMachine,
+      duplicateMachine
+    }),
+    [
+      aboutOpen,
+      activity,
+      appMeta,
+      applyTemplateSelection,
+      createDraftFromTemplateKey,
+      draft,
+      importTemplateFromDialog,
+      initialize,
+      openSakaByPath,
+      openSakaDialog,
+      ready,
+      recents,
+      saveDraft,
+      setLanguage,
+      settings,
+      updateDraft,
+      updateTemplateCatalog,
+      persistSettings,
+      createDraftFromDisk,
+      deleteMachine,
+      runtimeEnvironment,
+      runtimeMachines,
+      runningMachines,
+      getRuntimeStateForMachine,
+      startMachine,
+      stopMachine,
+      forceStopMachine,
+      transition,
+      triggerTransition,
+      deleteTarget,
+      startError,
+      renameMachine,
+      duplicateMachine
+    ]
+  );
+
+  return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;
+}
+
+export function useAppStore() {
+  const store = useContext(AppStoreContext);
+  if (!store) {
+    throw new Error('useAppStore must be used within AppStoreProvider');
+  }
+  return store;
+}

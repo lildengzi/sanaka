@@ -1,0 +1,709 @@
+const fs = require('fs');
+const fsPromises = require('fs/promises');
+const net = require('net');
+const path = require('path');
+const { spawn } = require('child_process');
+const { parse: parseToml } = require('smol-toml');
+const { QemuDetector } = require('./QemuDetector');
+const { RuntimeRegistry } = require('./RuntimeRegistry');
+const { QmpClient } = require('./QmpClient');
+const { QemuCommandBuilder } = require('./QemuCommandBuilder');
+
+const MACHINE_CONFIG_FILE = 'machine.svm';
+const STOP_GRACE_TIMEOUT_MS = 8000;
+
+function machineStatusToLifecycle(status) {
+  if (status === 'starting' || status === 'stopping' || status === 'resetting' || status === 'paused') {
+    return status;
+  }
+  if (status === 'running') {
+    return 'running';
+  }
+  return 'stopped';
+}
+
+function makeRuntimeEvent(type, payload) {
+  return {
+    type,
+    at: new Date().toISOString(),
+    ...payload
+  };
+}
+
+function getQmpAddress(platform, runtimeDir, machineId) {
+  if (platform === 'win32' || platform === 'darwin') {
+    return {
+      transport: 'tcp',
+      host: '127.0.0.1',
+      path: null
+    };
+  }
+  return {
+    transport: 'unix',
+    path: path.join(runtimeDir, 'qmp.sock')
+  };
+}
+
+function normalizeBundlePath(machinePath) {
+  const absolutePath = path.resolve(machinePath);
+  if (path.basename(absolutePath).toLowerCase() === MACHINE_CONFIG_FILE) {
+    return {
+      bundlePath: path.dirname(absolutePath),
+      configPath: absolutePath
+    };
+  }
+
+  return {
+    bundlePath: absolutePath,
+    configPath: path.join(absolutePath, MACHINE_CONFIG_FILE)
+  };
+}
+
+function parseMachineConfig(content) {
+  const parsed = parseToml(content);
+  if (parsed.kind !== 'machine') {
+    throw new Error('The selected configuration is not a machine package.');
+  }
+  return parsed;
+}
+
+function resolveDiskPath(bundlePath, disk) {
+  const storageMode = disk.storage_mode || (path.isAbsolute(disk.path) ? 'external' : 'managed');
+  if (storageMode === 'managed') {
+    return path.resolve(bundlePath, disk.path);
+  }
+  return path.resolve(disk.path);
+}
+
+async function normalizeMachinePaths(bundlePath, machine) {
+  const nextMachine = {
+    ...machine,
+    disks: Array.isArray(machine.disks) ? [...machine.disks] : []
+  };
+
+  for (let index = 0; index < nextMachine.disks.length; index += 1) {
+    const disk = nextMachine.disks[index];
+    const resolvedPath = resolveDiskPath(bundlePath, disk);
+    const exists = await fileExists(resolvedPath);
+    if (!exists) {
+      const diskLabel = disk.path || disk.id || `disk ${index + 1}`;
+      throw new Error(`Disk image not found: ${diskLabel}`);
+    }
+    nextMachine.disks[index] = {
+      ...disk,
+      path: resolvedPath
+    };
+  }
+
+  return nextMachine;
+}
+
+async function fileExists(filePath) {
+  try {
+    await fsPromises.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function appendBoundedText(current, chunk, maxLength = 8192) {
+  const combined = `${current}${chunk}`;
+  if (combined.length <= maxLength) {
+    return combined;
+  }
+  return combined.slice(combined.length - maxLength);
+}
+
+function pickPreferredStartupError({ stderr = '', error = null, exitCode = null }) {
+  const normalizedStderr = String(stderr || '').trim();
+  if (normalizedStderr) {
+    return normalizedStderr;
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error.trim();
+  }
+
+  if (typeof exitCode === 'number') {
+    return `QEMU exited with code ${exitCode}.`;
+  }
+
+  return 'Failed to start QEMU.';
+}
+
+async function allocatePort({ start, end }) {
+  for (let port = start; port <= end; port += 1) {
+    const available = await new Promise((resolve) => {
+      const server = net.createServer();
+      server.unref();
+      server.once('error', () => resolve(false));
+      server.listen(port, '127.0.0.1', () => {
+        server.close(() => resolve(true));
+      });
+    });
+    if (available) {
+      return port;
+    }
+  }
+  throw new Error(`No free port found in range ${start}-${end}.`);
+}
+
+class RuntimeManager {
+  constructor(options) {
+    this.app = options.app;
+    this.emitEvent = options.emitEvent;
+    this.platform = options.platform || process.platform;
+    this.arch = options.arch || process.arch;
+    this.detector = options.detector || new QemuDetector({
+      platform: this.platform,
+      arch: this.arch,
+      resourcesPath: options.resourcesPath || process.resourcesPath
+    });
+    this.registry = options.registry || new RuntimeRegistry();
+    this.builder = options.builder || new QemuCommandBuilder();
+    this.environment = null;
+  }
+
+  async initialize() {
+    await this.detectQemu();
+  }
+
+  async detectQemu() {
+    this.environment = await this.detector.detect();
+    this.emitEvent(
+      makeRuntimeEvent('environment-updated', {
+        environment: this.environment
+      })
+    );
+    return this.environment;
+  }
+
+  async getRuntimeEnvironment() {
+    return this.environment || this.detectQemu();
+  }
+
+  async listRunningMachines() {
+    return this.registry.values().map((record) => this.#serializeState(record));
+  }
+
+  async getMachineState(machineId) {
+    return this.#serializeState(this.registry.get(machineId));
+  }
+
+  async startMachine(machinePath) {
+    const environment = await this.detectQemu();
+    const { bundlePath, configPath } = normalizeBundlePath(machinePath);
+    const content = await fsPromises.readFile(configPath, 'utf8');
+    const machine = await normalizeMachinePaths(bundlePath, parseMachineConfig(content));
+
+    const existing = this.registry.get(machine.id);
+    if (existing && existing.status === 'stopping') {
+      await this.#waitForMachineExit(machine.id, 3000);
+    }
+
+    const stoppingRecord = this.registry.get(machine.id);
+    if (stoppingRecord && stoppingRecord.status === 'stopping') {
+      await this.forceStopMachine(machine.id).catch(() => null);
+      await this.#waitForMachineExit(machine.id, 5000);
+    }
+
+    const retryRecord = this.registry.get(machine.id);
+    if (retryRecord && retryRecord.status !== 'stopped') {
+      return {
+        ok: true,
+        alreadyRunning: true,
+        state: this.#serializeState(retryRecord)
+      };
+    }
+
+    const runtimeDir = path.join(this.app.getPath('userData'), 'runtime', machine.id);
+    await fsPromises.mkdir(runtimeDir, { recursive: true });
+
+    const qmpBase = getQmpAddress(this.platform, runtimeDir, machine.id);
+    if (qmpBase.transport === 'tcp') {
+      qmpBase.port = await allocatePort({ start: 47000, end: 47999 });
+    }
+
+    const displayBackend = 'vnc';
+    const port = await allocatePort({ start: 5901, end: 5999 });
+    const websocketPort = await allocatePort({ start: 5700, end: 5799 });
+    const displayNumber = port - 5900;
+    const logPath = path.join(runtimeDir, 'qemu.log');
+
+    let buildResult;
+    try {
+      buildResult = this.builder.build({
+        machine,
+        environment,
+        runtimePaths: {
+          runtimeDir,
+          qmp: qmpBase
+        },
+        displayConfig: {
+          port,
+          websocketPort,
+          displayNumber
+        },
+        host: {
+          platform: this.platform,
+          arch: this.arch
+        }
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Failed to build the QEMU launch command.',
+        state: null
+      };
+    }
+
+    const child = spawn(buildResult.binaryPath, buildResult.args, {
+      cwd: bundlePath,
+      env: process.env
+    });
+
+    const logStream = fs.createWriteStream(logPath, { flags: 'a' });
+    let startupStderr = '';
+    child.stdout?.pipe(logStream);
+    child.stderr?.pipe(logStream);
+    child.stderr?.on('data', (chunk) => {
+      startupStderr = appendBoundedText(startupStderr, chunk.toString('utf8'));
+    });
+
+    let resolveProcessOutcome;
+    const processOutcome = new Promise((resolve) => {
+      resolveProcessOutcome = resolve;
+    });
+    let startupCancelled = false;
+
+    const state = {
+      machineId: machine.id,
+      bundlePath,
+      configPath,
+      pid: child.pid || -1,
+      status: 'starting',
+      startedAt: new Date().toISOString(),
+      arch: machine.system.arch,
+      displayFrontend: buildResult.display.frontend,
+      displayBackend: buildResult.display.backend,
+      displayPort: buildResult.display.port,
+      displayWebSocketPort: buildResult.display.websocketPort,
+      qmpSocketPath: qmpBase.path || null,
+      qmpTcpPort: qmpBase.port || null,
+      logPath,
+      exitCode: null,
+      lastError: null
+    };
+
+    this.registry.set({
+      ...state,
+      process: child,
+      qmpClient: null,
+      machine,
+      logStream
+    });
+
+    this.emitEvent(
+      makeRuntimeEvent('machine-starting', {
+        machineId: machine.id,
+        state: this.#serializeState(this.registry.get(machine.id))
+      })
+    );
+
+    child.once('error', (error) => {
+      startupCancelled = true;
+      resolveProcessOutcome?.({ kind: 'error', error });
+      void this.#handleProcessExit(machine.id, null, error);
+    });
+
+    child.once('exit', (code) => {
+      startupCancelled = true;
+      resolveProcessOutcome?.({ kind: 'exit', code });
+      void this.#handleProcessExit(machine.id, code, null);
+    });
+
+    try {
+      const qmpClient = new QmpClient(
+        qmpBase.transport === 'unix'
+          ? { transport: 'unix', path: qmpBase.path }
+          : { transport: 'tcp', host: '127.0.0.1', port: qmpBase.port }
+      );
+      const qmpConnectOutcome = qmpClient.connect({
+        shouldContinue: () => !startupCancelled
+      })
+        .then(() => ({ kind: 'qmp-connected' }))
+        .catch((error) => ({ kind: 'qmp-error', error }));
+
+      const startupOutcome = await Promise.race([qmpConnectOutcome, processOutcome]);
+      if (startupOutcome.kind !== 'qmp-connected') {
+        qmpClient.close();
+        const preferredError =
+          startupOutcome.kind === 'qmp-error'
+            ? pickPreferredStartupError({ stderr: startupStderr, error: startupOutcome.error })
+            : pickPreferredStartupError({ stderr: startupStderr, error: startupOutcome.error, exitCode: startupOutcome.code });
+        return {
+          ok: false,
+          error: preferredError,
+          state: null
+        };
+      }
+
+      qmpClient.on('event', (message) => {
+        this.#handleQmpEvent(machine.id, message);
+      });
+
+      const status = await qmpClient.queryStatus();
+      const record = this.registry.get(machine.id);
+      if (!record) {
+        throw new Error('Runtime record disappeared before QMP handshake completed.');
+      }
+      record.qmpClient = qmpClient;
+      record.status = status?.running === false ? 'starting' : 'running';
+      this.registry.set(record);
+
+      this.emitEvent(
+        makeRuntimeEvent('machine-running', {
+          machineId: machine.id,
+          state: this.#serializeState(record)
+        })
+      );
+
+      return {
+        ok: true,
+        alreadyRunning: false,
+        state: this.#serializeState(record)
+      };
+    } catch (error) {
+      const activeRecord = this.registry.get(machine.id);
+      if (activeRecord?.process) {
+        await this.forceStopMachine(machine.id);
+      }
+      const failedState = this.registry.get(machine.id);
+      return {
+        ok: false,
+        error: pickPreferredStartupError({ stderr: startupStderr, error }),
+        state: failedState ? this.#serializeState(failedState) : null
+      };
+    }
+  }
+
+  async stopMachine(machineId) {
+    const record = this.registry.get(machineId);
+    if (!record) {
+      return { ok: false, error: 'Machine is not running.' };
+    }
+
+    record.status = 'stopping';
+    this.registry.set(record);
+    this.#scheduleStopEscalation(record);
+    this.emitEvent(
+      makeRuntimeEvent('machine-stopping', {
+        machineId,
+        state: this.#serializeState(record)
+      })
+    );
+
+    if (record.qmpClient) {
+      await record.qmpClient.systemPowerdown();
+      return { ok: true, state: this.#serializeState(record) };
+    }
+
+    record.process.kill('SIGTERM');
+    return { ok: true, state: this.#serializeState(record) };
+  }
+
+  async forceStopMachine(machineId) {
+    const record = this.registry.get(machineId);
+    if (!record) {
+      return { ok: false, error: 'Machine is not running.' };
+    }
+
+    this.#clearStopEscalation(record);
+    record.status = 'stopping';
+    this.registry.set(record);
+    this.emitEvent(
+      makeRuntimeEvent('machine-stopping', {
+        machineId,
+        state: this.#serializeState(record)
+      })
+    );
+
+    try {
+      record.process.kill('SIGKILL');
+    } catch {
+      try {
+        record.process.kill('SIGTERM');
+      } catch {
+        // The process may already be gone; cleanup below will settle the UI state.
+      }
+    }
+
+    const exited = await this.#waitForMachineExit(machineId, 1500);
+    if (!exited && this.registry.get(machineId)) {
+      await this.#finalizeStoppedRecord(machineId, null, null);
+    }
+
+    return { ok: true, state: null };
+  }
+
+  async resetMachine(machineId, mode = 'hard') {
+    const record = this.registry.get(machineId);
+    if (!record) {
+      return { ok: false, error: 'Machine is not running.' };
+    }
+
+    if (mode === 'soft') {
+      const bundlePath = record.bundlePath;
+      const stopped = await this.forceStopMachine(machineId);
+      if (!stopped.ok) {
+        return stopped;
+      }
+      return this.startMachine(bundlePath);
+    }
+
+    if (!record.qmpClient) {
+      return { ok: false, error: 'Machine is not ready for reset yet.' };
+    }
+
+    record.status = 'resetting';
+    this.registry.set(record);
+    this.emitEvent(
+      makeRuntimeEvent('machine-resetting', {
+        machineId,
+        state: this.#serializeState(record)
+      })
+    );
+
+    try {
+      await record.qmpClient.systemReset();
+      return { ok: true, state: this.#serializeState(record) };
+    } catch (error) {
+      record.status = 'running';
+      record.lastError = error instanceof Error ? error.message : 'Failed to reset the machine.';
+      this.registry.set(record);
+      return {
+        ok: false,
+        error: record.lastError,
+        state: this.#serializeState(record)
+      };
+    }
+  }
+
+  async changeMedia(machineId, isoPath, drive = 'cdrom') {
+    const record = this.registry.get(machineId);
+    if (!record) {
+      return { ok: false, error: 'Machine is not running.' };
+    }
+
+    if (!record.qmpClient || !record.machine) {
+      return { ok: false, error: 'Machine is not ready for media changes yet.' };
+    }
+
+    const targetId = this.#resolveMediaDeviceId(record.machine, drive);
+    if (!targetId) {
+      return { ok: false, error: `No ${drive} drive is available on this machine.` };
+    }
+
+    try {
+      await record.qmpClient.blockdevChangeMedium({
+        id: targetId,
+        filename: isoPath,
+        format: path.extname(isoPath).toLowerCase() === '.iso' ? 'raw' : 'raw',
+        readOnly: true
+      });
+      return { ok: true, state: this.#serializeState(record) };
+    } catch (error) {
+      record.lastError = error instanceof Error ? error.message : 'Failed to change media.';
+      this.registry.set(record);
+      return {
+        ok: false,
+        error: record.lastError,
+        state: this.#serializeState(record)
+      };
+    }
+  }
+
+  async dispose() {
+    const active = this.registry.values();
+    await Promise.all(active.map((record) => this.forceStopMachine(record.machineId).catch(() => null)));
+  }
+
+  handleQmpEventForTest(machineId, message) {
+    this.#handleQmpEvent(machineId, message);
+  }
+
+  #handleQmpEvent(machineId, message) {
+    const record = this.registry.get(machineId);
+    if (!record) {
+      return;
+    }
+
+    let eventType = null;
+    if (message.event === 'SHUTDOWN') {
+      if (record.status === 'stopping') {
+        eventType = 'machine-stopping';
+      }
+    } else if (message.event === 'RESUME') {
+      record.status = 'running';
+      eventType = 'machine-running';
+    } else if (message.event === 'STOP') {
+      record.status = 'paused';
+    } else if (message.event === 'RESET') {
+      record.status = 'running';
+      eventType = 'machine-running';
+    }
+
+    this.registry.set(record);
+    if (eventType) {
+      this.emitEvent(
+        makeRuntimeEvent(eventType, {
+          machineId,
+          state: this.#serializeState(record)
+        })
+      );
+    }
+  }
+
+  async #handleProcessExit(machineId, code, error) {
+    await this.#finalizeStoppedRecord(machineId, code, error);
+  }
+
+  async #finalizeStoppedRecord(machineId, code, error) {
+    const record = this.registry.get(machineId);
+    if (!record) {
+      return;
+    }
+
+    this.#clearStopEscalation(record);
+
+    if (record.qmpClient) {
+      record.qmpClient.close();
+    }
+
+    if (record.logStream) {
+      const stream = record.logStream;
+      await Promise.race([
+        new Promise((resolve) => {
+          stream.once('close', resolve);
+          stream.end();
+        }),
+        wait(500)
+      ]).catch(() => null);
+    }
+
+    record.status = 'stopped';
+    record.exitCode = code;
+    record.lastError = error ? error.message : null;
+    record.qmpClient = null;
+    record.process = null;
+    record.machine = null;
+    record.logStream = null;
+    this.emitEvent(
+      makeRuntimeEvent(error ? 'machine-error' : 'machine-stopped', {
+        machineId,
+        state: this.#serializeState(record),
+        error: error ? error.message : null
+      })
+    );
+
+    this.registry.delete(machineId);
+  }
+
+  #serializeState(record) {
+    if (!record) {
+      return null;
+    }
+
+    return {
+      machineId: record.machineId,
+      bundlePath: record.bundlePath,
+      configPath: record.configPath,
+      pid: record.pid,
+      status: machineStatusToLifecycle(record.status),
+      startedAt: record.startedAt,
+      arch: record.arch,
+      displayFrontend: record.displayFrontend,
+      displayBackend: record.displayBackend,
+      displayPort: record.displayPort,
+      displayWebSocketPort: record.displayWebSocketPort,
+      qmpSocketPath: record.qmpSocketPath,
+      qmpTcpPort: record.qmpTcpPort,
+      logPath: record.logPath,
+      exitCode: record.exitCode,
+      lastError: record.lastError
+    };
+  }
+
+  #resolveMediaDeviceId(machine, drive) {
+    if (drive === 'floppy') {
+      return machine.media?.floppy ? 'floppy0' : null;
+    }
+
+    return 'cd0';
+  }
+
+  #scheduleStopEscalation(record) {
+    this.#clearStopEscalation(record);
+    const timer = setTimeout(() => {
+      const active = this.registry.get(record.machineId);
+      if (!active?.process || active.process.exitCode !== null) {
+        return;
+      }
+
+      try {
+        active.process.kill('SIGTERM');
+      } catch {
+        return;
+      }
+
+      setTimeout(() => {
+        const current = this.registry.get(record.machineId);
+        if (!current?.process || current.process.exitCode !== null) {
+          return;
+        }
+        try {
+          current.process.kill('SIGKILL');
+        } catch {
+          return;
+        }
+      }, 1000).unref?.();
+    }, STOP_GRACE_TIMEOUT_MS);
+    timer.unref?.();
+    record.stopEscalationTimer = timer;
+  }
+
+  #clearStopEscalation(record) {
+    if (record?.stopEscalationTimer) {
+      clearTimeout(record.stopEscalationTimer);
+      record.stopEscalationTimer = null;
+    }
+  }
+
+  async #waitForMachineExit(machineId, timeoutMs) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      if (!this.registry.get(machineId)) {
+        return true;
+      }
+      await wait(100);
+    }
+    return false;
+  }
+}
+
+module.exports = {
+  RuntimeManager,
+  normalizeBundlePath,
+  parseMachineConfig,
+  allocatePort,
+  pickPreferredStartupError
+};

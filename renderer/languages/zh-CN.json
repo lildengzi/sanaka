@@ -1,0 +1,118 @@
+{
+  "app": {
+    "title": "Sanaka · QEMU 虚拟机管理器",
+    "header_title": "Sanaka",
+    "about": "关于 Sanaka",
+    "create_vm": "添加虚拟机",
+    "create_vm_title": "新建虚拟机"
+  },
+  "empty_state": {
+    "title": "还没有虚拟机",
+    "desc": "点击右下角的按钮添加你的第一个虚拟机",
+    "icon_alt": "显示器"
+  },
+  "card_info": {
+    "title": "信息",
+    "note": "所有配置与磁盘路径将以相对路径保存在此虚拟机文件夹内的配置文件中（config.json）。",
+    "notes_label": "注释（可选）",
+    "notes_placeholder": "为该虚拟机添加备注…"
+  },
+  "card_base": {
+    "title": "基础配置",
+    "os_template": {
+      "label": "操作系统模板",
+      "default": "请选择",
+      "hint": "根据选择的操作系统显示建议或限制（例如内存建议、驱动建议）。",
+      "windows": "Windows",
+      "linux": "Linux",
+      "freebsd": "FreeBSD",
+      "other": "其他"
+    },
+    "accelerator": {
+      "label": "虚拟机加速设置",
+      "tcg": "tcg（默认、全部兼容）",
+      "kvm": "kvm（Linux）",
+      "hax": "hax（Windows）",
+      "whpx": "whpx（Windows）",
+      "hvf": "hvf（macOS）"
+    },
+    "arch": {
+      "label": "QEMU 架构"
+    },
+    "cpu": {
+      "label": "CPU 核心数",
+      "placeholder": "逻辑核心数"
+    },
+    "memory": {
+      "label": "内存大小 (MB)",
+      "placeholder": "例如 4096"
+    },
+    "sound": {
+      "label": "声卡",
+      "default": "无声卡",
+      "hda": "Intel HD Audio (hda)",
+      "ac97": "AC'97"
+    }
+  },
+  "card_disk": {
+    "title": "磁盘配置",
+    "add_disk": "添加磁盘",
+    "create_image": "创建磁盘映像",
+    "manage_disk": "既有磁盘管理",
+    "disk_note": "最多允许配置 4 个硬盘（不含光驱）。删除仅移除配置引用，不会物理删除文件。",
+    "title": "磁盘配置",
+    "add_disk": "添加磁盘",
+    "create_image": "创建磁盘映像",
+    "manage_disk": "既有磁盘管理",
+    "note": "最多允许配置 4 个硬盘（不含光驱）。删除仅移除配置引用，不会物理删除文件。",
+    "delete": "删除"
+  },
+  "card_cdrom": {
+    "title": "光盘镜像 (ISO)",
+    "select_file": "选择文件",
+    "placeholder": "未选择任何文件"
+  },
+  "card_network": {
+    "title": "网络设置",
+    "type_label": "网络类型",
+    "default_nat": "默认 NAT（简易）",
+    "bridge": "网桥（高级）",
+    "custom_mac_label": "自定义 MAC 地址（可选）",
+    "custom_mac_placeholder": "留空则自动生成"
+  },
+  "card_vnc": {
+    "title": "VNC/远程桌面",
+    "port_label": "VNC 端口",
+    "port_placeholder": ":1 → 5901",
+    "pass_label": "VNC 密码（可选）",
+    "pass_placeholder": "留空则不启用密码"
+  },
+  "card_peripherals": {
+    "title": "外部设备",
+    "usb_tablet": "启用 USB-tablet 鼠标",
+    "note": "预留区域：后续可添加 USB 直通、音频设备细分等配置。"
+  },
+  "card_advanced": {
+    "title": "高级选项",
+    "custom_qemu_label": "自定义 QEMU 参数（追加到命令行末尾）",
+    "custom_qemu_placeholder": "-vga std -device intel-hda …"
+  },
+  "button": {
+    "save": "保存并启动",
+    "select_file": "选择文件",
+    "add_disk": "添加磁盘",
+    "create_image": "创建磁盘映像",
+    "manage_disk": "既有磁盘管理"
+  },
+  "icons": {
+    "add": "添加",
+    "file": "文件",
+    "folder": "文件夹"
+  },
+  "misc": {
+    "about_title": "关于 Sanaka",
+    "about_version": "轻量 QEMU 管理界面 · 版本 1.0 Beta",
+    "about_copy": "Sanakaprix 2025"
+  }
+}
+
