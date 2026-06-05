@@ -16,7 +16,17 @@ exports.default = async function afterPack(context) {
     }
   };
 
+  const setDocumentTypeValue = (index, key, type, value) => {
+    const plistKey = `CFBundleDocumentTypes:${index}:${key}`;
+    try {
+      execFileSync('/usr/libexec/PlistBuddy', ['-c', `Set :${plistKey} ${value}`, plistPath]);
+    } catch {
+      execFileSync('/usr/libexec/PlistBuddy', ['-c', `Add :${plistKey} ${type} ${value}`, plistPath]);
+    }
+  };
+
   setPlistValue('CFBundleShortVersionString', 'string', '0.0.1 (beta)');
   setPlistValue('CFBundleVersion', 'string', '0.0.1');
   setPlistValue('NSHumanReadableCopyright', 'string', 'Copyright © 2026 Sanakaprix');
+  setDocumentTypeValue(0, 'LSTypeIsPackage', 'bool', 'true');
 }

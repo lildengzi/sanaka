@@ -48,6 +48,7 @@
           "ext": "saka",
           "name": "SanakaMachinePackage",
           "description": "Sanaka Virtual Machine",
+          "isPackage": true,
           "role": "Viewer"
         }
       ],
@@ -67,6 +68,9 @@
       "target": [
         "nsis"
       ]
+    },
+    "nsis": {
+      "perMachine": true
     },
     "linux": {
       "icon": "assets/icons/sanakafish.png",

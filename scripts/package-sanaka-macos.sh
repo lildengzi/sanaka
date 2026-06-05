@@ -25,6 +25,14 @@ fi
 SANAKA_QEMU_AARCH64_ENTITLEMENTS="$REPO_ROOT/build/qemu-aarch64.entitlements.plist" \
   bash "$REPO_ROOT/scripts/embed-qemu-macos.sh" "$QEMU_BUILD_DIR" "$APP_PATH" --sign
 
+LSREGISTER_BIN="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+if [[ -x "$LSREGISTER_BIN" ]]; then
+  "$LSREGISTER_BIN" -f "$APP_PATH" >/dev/null 2>&1 || true
+fi
+
+touch "$APP_PATH" || true
+
 echo
 echo "Packaged app with embedded QEMU:"
 echo "$APP_PATH"
