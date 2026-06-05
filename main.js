@@ -76,12 +76,19 @@ function emitRuntimeEvent(payload) {
 
 function getUpdateService() {
   if (!updateService) {
+    const forcedLocalVersion = typeof process.env.SANAKA_UPDATE_LOCAL_VERSION === 'string'
+      ? process.env.SANAKA_UPDATE_LOCAL_VERSION.trim()
+      : '';
+    const forcedRemoteVersion = typeof process.env.SANAKA_UPDATE_REMOTE_VERSION === 'string'
+      ? process.env.SANAKA_UPDATE_REMOTE_VERSION.trim()
+      : '';
     updateService = new UpdateService({
-      appVersion: app.getVersion(),
+      appVersion: forcedLocalVersion || app.getVersion(),
       loadSettings: () => readJsonFile(SETTINGS_FILE, null),
       saveSettings: (settings) => writeJsonFile(SETTINGS_FILE, settings),
       emitToRenderer,
       openExternal: (url) => shell.openExternal(url),
+      forcedRemoteVersion,
       startupDelayMs: readPositiveIntEnv('SANAKA_UPDATE_STARTUP_DELAY_MS', undefined),
       checkIntervalMs: readPositiveIntEnv('SANAKA_UPDATE_INTERVAL_MS', undefined)
     });

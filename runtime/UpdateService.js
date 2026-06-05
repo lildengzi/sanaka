@@ -107,6 +107,7 @@ class UpdateService {
     this.openExternal = options.openExternal;
     this.fetchImpl = options.fetchImpl || global.fetch;
     this.manifestUrls = options.manifestUrls || DEFAULT_MANIFEST_URLS;
+    this.forcedRemoteVersion = typeof options.forcedRemoteVersion === 'string' ? options.forcedRemoteVersion.trim() : '';
     this.startupDelayMs = options.startupDelayMs ?? DEFAULT_STARTUP_DELAY_MS;
     this.checkIntervalMs = options.checkIntervalMs ?? DEFAULT_CHECK_INTERVAL_MS;
     this.currentChannel = detectUpdateChannel(this.appVersion);
@@ -227,7 +228,14 @@ class UpdateService {
           throw new Error(`Update source for ${channel} returned ${response.status}.`);
         }
         const text = await response.text();
-        return normalizeManifest(parseToml(text));
+        const manifest = normalizeManifest(parseToml(text));
+        if (this.forcedRemoteVersion) {
+          return {
+            ...manifest,
+            version: this.forcedRemoteVersion
+          };
+        }
+        return manifest;
       })
     );
     return results.filter(Boolean);
