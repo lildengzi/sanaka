@@ -57,7 +57,7 @@ async function resolveBinary(binaryName, platform, env, searchRoots = []) {
 
   for (const searchPath of searchPaths) {
     for (const ext of extensions) {
-      const suffix = platform === 'win32' || binaryName.toLowerCase().endsWith(ext.toLowerCase()) ? '' : ext;
+      const suffix = binaryName.toLowerCase().endsWith(ext.toLowerCase()) ? '' : ext;
       const candidate = path.join(searchPath, `${binaryName}${suffix}`);
       if (await isExecutable(candidate)) {
         return candidate;
@@ -99,9 +99,66 @@ function makeInstallHint(platform) {
     return 'Install QEMU from your distribution packages, for example: sudo apt install qemu-system qemu-utils';
   }
   if (platform === 'win32') {
-    return 'Install QEMU and ensure the qemu-system binaries are available on PATH.';
+    return 'Install QEMU and ensure the qemu-system binaries are available on PATH. Sanaka also scans common Windows install folders, but you may still need to restart the app after changing PATH.';
   }
   return 'Install QEMU and ensure the qemu-system binaries are available on PATH.';
+}
+
+function pushIfString(target, value) {
+  if (typeof value === 'string' && value.trim()) {
+    target.push(value.trim());
+  }
+}
+
+function makeWindowsSearchRoots(env = {}) {
+  const roots = [];
+  const programFilesRoots = [
+    env.ProgramW6432,
+    env['ProgramFiles(x86)'],
+    env.ProgramFiles
+  ].filter(Boolean);
+
+  for (const base of programFilesRoots) {
+    pushIfString(roots, path.join(base, 'qemu'));
+    pushIfString(roots, path.join(base, 'qemu', 'bin'));
+    pushIfString(roots, path.join(base, 'QEMU'));
+    pushIfString(roots, path.join(base, 'QEMU', 'bin'));
+  }
+
+  if (env.LocalAppData) {
+    pushIfString(roots, path.join(env.LocalAppData, 'Programs', 'qemu'));
+    pushIfString(roots, path.join(env.LocalAppData, 'Programs', 'qemu', 'bin'));
+    pushIfString(roots, path.join(env.LocalAppData, 'Programs', 'QEMU'));
+    pushIfString(roots, path.join(env.LocalAppData, 'Programs', 'QEMU', 'bin'));
+  }
+
+  if (env.ChocolateyInstall) {
+    pushIfString(roots, path.join(env.ChocolateyInstall, 'bin'));
+    pushIfString(roots, path.join(env.ChocolateyInstall, 'lib', 'qemu'));
+    pushIfString(roots, path.join(env.ChocolateyInstall, 'lib', 'qemu', 'tools'));
+  }
+
+  if (env.USERPROFILE) {
+    pushIfString(roots, path.join(env.USERPROFILE, 'scoop', 'apps', 'qemu', 'current'));
+    pushIfString(roots, path.join(env.USERPROFILE, 'scoop', 'apps', 'qemu', 'current', 'bin'));
+  }
+
+  pushIfString(roots, 'C:\\Program Files\\qemu');
+  pushIfString(roots, 'C:\\Program Files\\qemu\\bin');
+  pushIfString(roots, 'C:\\Program Files\\QEMU');
+  pushIfString(roots, 'C:\\Program Files\\QEMU\\bin');
+  pushIfString(roots, 'C:\\Program Files (x86)\\qemu');
+  pushIfString(roots, 'C:\\Program Files (x86)\\qemu\\bin');
+  pushIfString(roots, 'C:\\msys64\\mingw64\\bin');
+
+  return roots;
+}
+
+function makePlatformSearchRoots(platform, env = {}) {
+  if (platform === 'win32') {
+    return makeWindowsSearchRoots(env);
+  }
+  return [];
 }
 
 function makeBundledSearchRoots(options = {}) {
@@ -110,6 +167,12 @@ function makeBundledSearchRoots(options = {}) {
 
   if (typeof resourcesPath === 'string' && resourcesPath.trim()) {
     roots.push(path.join(resourcesPath, 'qemu', 'bin'));
+  }
+
+  for (const entry of makePlatformSearchRoots(options.platform || process.platform, options.env || process.env)) {
+    if (typeof entry === 'string' && entry.trim()) {
+      roots.push(entry);
+    }
   }
 
   for (const entry of options.searchRoots || []) {

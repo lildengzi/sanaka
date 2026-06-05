@@ -43,4 +43,29 @@ describe('QemuDetector', () => {
     expect(result.binaries.ppc64.path).toBe(path.join(bundledBinDir, 'qemu-system-ppc64'));
     expect(result.binaries.qemuImg.path).toBe(path.join(bundledBinDir, 'qemu-img'));
   });
+
+  it('finds qemu from common Windows install folders even when PATH is empty', async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sanaka-qemu-detector-win-'));
+    const qemuDir = path.join(tempRoot, 'Program Files', 'qemu');
+
+    ['qemu-system-x86_64.exe', 'qemu-img.exe'].forEach((name) => touchExecutable(path.join(qemuDir, name)));
+
+    const detector = new QemuDetector({
+      platform: 'win32',
+      arch: 'x64',
+      env: {
+        PATH: '',
+        PATHEXT: '.EXE;.CMD;.BAT;.COM',
+        ProgramFiles: path.join(tempRoot, 'Program Files')
+      },
+      execFileImpl: async () => ({ stdout: 'QEMU emulator version 11.0.1\r\n', stderr: '' })
+    });
+
+    const result = await detector.detect();
+
+    expect(result.available).toBe(true);
+    expect(result.availableSystemTargets).toEqual(['x86_64']);
+    expect(result.binaries.x86_64.path?.toLowerCase()).toBe(path.join(qemuDir, 'qemu-system-x86_64.exe').toLowerCase());
+    expect(result.binaries.qemuImg.path?.toLowerCase()).toBe(path.join(qemuDir, 'qemu-img.exe').toLowerCase());
+  });
 });
