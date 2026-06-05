@@ -19,7 +19,7 @@ fi
 
 echo "拉取远程最新代码..."
 git fetch origin
-git pull --rebase origin main
+git reset --hard origin/main
 
 echo "安装/修复依赖..."
 npm install
