@@ -5,7 +5,7 @@ import { makeWorkspaceMachineItems, resolveWorkspaceSelection } from '../lib/mac
 import { useAppStore } from '../store/AppStore';
 import { usePresence } from '../hooks/usePresence';
 import { useT } from '../hooks/useT';
-import logoUrl from '../../assets/icons/logo.svg';
+import logoUrl from '../../assets/icons/fish.png';
 
 interface SidebarIconProps {
   name: 'plus' | 'machine' | 'home' | 'settings' | 'about';

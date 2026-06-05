@@ -12,7 +12,9 @@ const MACHINE_CONFIG_FILE = 'machine.svm';
 const MACHINE_PREVIEW_FILE = 'preview.png';
 const MACHINE_DISKS_DIRECTORY = 'Disks';
 const DEFAULT_MACHINE_ROOT = 'Sanaka';
-const APP_ICON_PATH = path.join(__dirname, 'assets', 'icons', 'logo.svg');
+const APP_ICON_PATH = path.join(__dirname, 'assets', 'icons', 'sanakafish.png');
+
+app.setName('Sanaka');
 
 function readPositiveIntEnv(name, fallback) {
   const raw = process.env[name];
@@ -383,38 +385,54 @@ function revealMainWindow() {
 }
 
 function buildMenu() {
-  const template = [
+  const appSubmenu = [
     {
-      label: app.name,
-      submenu: [
-        {
-          label: '关于 Sanaka',
-          click: () => emitToRenderer('app:open-about')
-        },
-        {
-          label: '设置',
-          click: () => emitToRenderer('app:open-settings')
-        },
-        { type: 'separator' },
-        {
-          label: '打开虚拟机配置',
-          accelerator: 'CmdOrCtrl+O',
-          click: async () => {
-            const opened = await ipcHandlers.openMachineBundle();
-            if (opened) {
-              emitToRenderer('app:open-saka', { path: opened.path });
-            }
-          }
-        },
-        { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit' }
-      ]
+      label: '关于 Sanaka',
+      click: () => emitToRenderer('app:open-about')
+    },
+    {
+      label: '设置',
+      click: () => emitToRenderer('app:open-settings')
+    },
+    { type: 'separator' },
+    {
+      label: '打开虚拟机配置',
+      accelerator: 'CmdOrCtrl+O',
+      click: async () => {
+        const opened = await ipcHandlers.openMachineBundle();
+        if (opened) {
+          emitToRenderer('app:open-saka', { path: opened.path });
+        }
+      }
     }
   ];
+
+  const template =
+    process.platform === 'darwin'
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              ...appSubmenu,
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' }
+            ]
+          }
+        ]
+      : [
+          {
+            label: '选项(&O)',
+            submenu: [
+              ...appSubmenu,
+              { type: 'separator' },
+              { role: 'quit', label: '退出' }
+            ]
+          }
+        ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 

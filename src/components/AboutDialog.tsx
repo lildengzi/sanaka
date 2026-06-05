@@ -1,6 +1,6 @@
 import { useT } from '../hooks/useT';
 import { usePresence } from '../hooks/usePresence';
-import logoUrl from '../../assets/icons/logo.svg';
+import logoUrl from '../../assets/icons/fish.png';
 
 interface AboutDialogProps {
   open: boolean;

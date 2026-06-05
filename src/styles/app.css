@@ -2691,9 +2691,9 @@ body.platform-darwin .app-shell__surface {
   background: transparent !important;
 }
 body.platform-darwin .app-sidebar {
-  background: rgba(255, 255, 255, 0.08) !important;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.0025) !important;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   border-right: 1px solid rgba(210, 197, 223, 0.3) !important;
   box-shadow: none !important;
 }
