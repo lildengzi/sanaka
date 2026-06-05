@@ -562,7 +562,7 @@ const ipcHandlers = {
     if (!filePath) {
       throw new Error('Missing file path');
     }
-    await shell.openPath(path.resolve(filePath));
+    shell.showItemInFolder(path.resolve(filePath));
     return { ok: true };
   },
   async pickDisk() {
