@@ -122,7 +122,9 @@ const archOptions = ['x86_64', 'i386', 'aarch64', 'arm', 'riscv64', 'ppc', 'ppc6
   label: string;
 }>;
 const x86MachineTypeOptions = [
+  { value: 'pc-q35-9.2', label: 'pc-q35-9.2' },
   { value: 'q35', label: 'q35' },
+  { value: 'pc-i440fx-9.2', label: 'pc-i440fx-9.2' },
   { value: 'pc', label: 'pc' }
 ] as const;
 const armMachineTypeOptions = [

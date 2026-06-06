@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   runtime: {
     detectQemu: () => ipcRenderer.invoke('runtime:detect-qemu'),
     getRuntimeEnvironment: () => ipcRenderer.invoke('runtime:get-environment'),
+    previewMachineCommand: (bundlePath) => ipcRenderer.invoke('runtime:preview-machine-command', bundlePath),
     startMachine: (bundlePath) => ipcRenderer.invoke('runtime:start-machine', bundlePath),
     stopMachine: (machineId) => ipcRenderer.invoke('runtime:stop-machine', machineId),
     forceStopMachine: (machineId) => ipcRenderer.invoke('runtime:force-stop-machine', machineId),

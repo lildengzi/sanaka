@@ -672,6 +672,9 @@ const ipcHandlers = {
   async getRuntimeEnvironment() {
     return getRuntimeManager().getRuntimeEnvironment();
   },
+  async previewMachineCommand(_event, bundlePath) {
+    return getRuntimeManager().previewMachineCommand(bundlePath);
+  },
   async startMachine(_event, bundlePath) {
     return getRuntimeManager().startMachine(bundlePath);
   },
@@ -759,6 +762,7 @@ app.whenReady().then(() => {
   ipcMain.handle('updater:open-update-page', ipcHandlers.openUpdatePage);
   ipcMain.handle('runtime:detect-qemu', ipcHandlers.detectQemu);
   ipcMain.handle('runtime:get-environment', ipcHandlers.getRuntimeEnvironment);
+  ipcMain.handle('runtime:preview-machine-command', ipcHandlers.previewMachineCommand);
   ipcMain.handle('runtime:start-machine', ipcHandlers.startMachine);
   ipcMain.handle('runtime:stop-machine', ipcHandlers.stopMachine);
   ipcMain.handle('runtime:force-stop-machine', ipcHandlers.forceStopMachine);

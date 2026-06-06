@@ -218,6 +218,7 @@ class QemuDetector {
       availableSystemTargets,
       accelerators: inferAccelerators(this.platform),
       installHint: makeInstallHint(this.platform),
+      searchRoots: [...this.searchRoots],
       binaries
     };
   }

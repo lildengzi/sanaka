@@ -21,11 +21,18 @@ export function normalizeTemplateLabel(template: { key: string; label: string })
 
 export function normalizeMachineCompatibility(machine: SakaMachine): SakaMachine {
   const normalizedGpu = machine.display.gpu === 'VGA' ? 'std' : machine.display.gpu;
+  const normalizedMachineType =
+    machine.system.machine_type === 'pc'
+      ? 'pc-i440fx-9.2'
+      : machine.system.machine_type === 'q35'
+        ? 'pc-q35-9.2'
+        : machine.system.machine_type;
   return {
     ...machine,
     template: normalizeTemplateLabel(machine.template),
     system: {
       ...machine.system,
+      machine_type: normalizedMachineType,
       uefi: machine.system.uefi ?? false
     },
     display: {
@@ -80,7 +87,7 @@ export const builtInTemplates: SakaTemplate[] = [
     title: 'Windows 98 Template',
     description: 'Legacy compatibility machine for Windows 98 workloads.',
     template: { key: 'win98', label: 'Windows 98' },
-    system: { arch: 'i386', machine_type: 'pc', accelerator: 'tcg', boot_order: 'cdrom', uefi: false, memory_mib: 128, cpu_cores: 1, sound_card: 'sb16' },
+    system: { arch: 'i386', machine_type: 'pc-i440fx-9.2', accelerator: 'tcg', boot_order: 'cdrom', uefi: false, memory_mib: 128, cpu_cores: 1, sound_card: 'sb16' },
     media: { iso: '', floppy: '' },
     network: { enabled: true, mode: 'user', card: 'pcnet' },
     display: {
@@ -100,7 +107,7 @@ export const builtInTemplates: SakaTemplate[] = [
     title: 'Windows 10 Template',
     description: 'Compatibility-first modern Windows machine.',
     template: { key: 'win11', label: 'Windows 10' },
-    system: { arch: 'x86_64', machine_type: 'q35', accelerator: 'tcg', boot_order: 'cdrom', uefi: false, memory_mib: 4096, cpu_cores: 2, sound_card: 'intel-hda' },
+    system: { arch: 'x86_64', machine_type: 'pc-q35-9.2', accelerator: 'tcg', boot_order: 'cdrom', uefi: false, memory_mib: 4096, cpu_cores: 2, sound_card: 'intel-hda' },
     media: { iso: '', floppy: '' },
     network: { enabled: true, mode: 'user', card: 'rtl8139' },
     display: {
@@ -120,7 +127,7 @@ export const builtInTemplates: SakaTemplate[] = [
     title: 'Linux Generic Template',
     description: 'Balanced Linux virtual workstation with virtio defaults.',
     template: { key: 'linux', label: 'Linux Generic' },
-    system: { arch: 'x86_64', machine_type: 'q35', accelerator: 'tcg', boot_order: 'cdrom', uefi: false, memory_mib: 2048, cpu_cores: 2, sound_card: 'intel-hda' },
+    system: { arch: 'x86_64', machine_type: 'pc-q35-9.2', accelerator: 'tcg', boot_order: 'cdrom', uefi: false, memory_mib: 2048, cpu_cores: 2, sound_card: 'intel-hda' },
     media: { iso: '', floppy: '' },
     network: { enabled: true, mode: 'user', card: 'virtio-net-pci' },
     display: {
@@ -140,7 +147,7 @@ export const builtInTemplates: SakaTemplate[] = [
     title: 'Custom Template',
     description: 'Manual machine template for advanced workflows.',
     template: { key: 'custom', label: 'Custom' },
-    system: { arch: 'x86_64', machine_type: 'q35', accelerator: 'tcg', boot_order: 'disk', uefi: false, memory_mib: 2048, cpu_cores: 2, sound_card: 'intel-hda' },
+    system: { arch: 'x86_64', machine_type: 'pc-q35-9.2', accelerator: 'tcg', boot_order: 'disk', uefi: false, memory_mib: 2048, cpu_cores: 2, sound_card: 'intel-hda' },
     media: { iso: '', floppy: '' },
     network: { enabled: true, mode: 'user', card: 'virtio-net-pci' },
     display: {

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { DebugCommandPanel } from '../components/DebugCommandPanel';
 import { MachineVisual } from '../components/MachineVisual';
 import { SectionCard, StatusChip } from '../components/Field';
 import { useT } from '../hooks/useT';
@@ -262,6 +263,8 @@ export function MachineDetailsPage() {
                 </div>
               </div>
             </SectionCard>
+
+            <DebugCommandPanel bundlePath={draft.filePath} />
 
             {draft.filePath ? (
               <section className="danger-zone" aria-label={t('details.deleteTitle')}>

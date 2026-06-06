@@ -112,6 +112,7 @@ export interface QemuEnvironment {
   availableSystemTargets: string[];
   accelerators: string[];
   installHint: string;
+  searchRoots?: string[];
   binaries: {
     x86_64: QemuBinaryAvailability;
     aarch64: QemuBinaryAvailability;
@@ -142,6 +143,29 @@ export interface RuntimeMachineState {
   logPath: string;
   exitCode: number | null;
   lastError: string | null;
+}
+
+export interface RuntimeCommandPreview {
+  machineId: string;
+  bundlePath: string;
+  configPath: string;
+  binaryPath: string;
+  args: string[];
+  commandLine: string;
+  accelerator: string;
+  display: {
+    frontend: DisplayFrontend;
+    backend: 'vnc' | 'spice';
+    port: number;
+    websocketPort?: number;
+  };
+  qmp: {
+    transport: 'unix' | 'tcp';
+    path: string | null;
+    host: string | null;
+    port: number | null;
+  };
+  environment: QemuEnvironment;
 }
 
 export interface RuntimeEvent {
@@ -247,6 +271,7 @@ export interface ElectronApi {
   runtime: {
     detectQemu: () => Promise<QemuEnvironment>;
     getRuntimeEnvironment: () => Promise<QemuEnvironment>;
+    previewMachineCommand: (bundlePath: string) => Promise<RuntimeCommandPreview>;
     startMachine: (bundlePath: string) => Promise<StartMachineResult>;
     stopMachine: (machineId: string) => Promise<StopMachineResult>;
     forceStopMachine: (machineId: string) => Promise<StopMachineResult>;

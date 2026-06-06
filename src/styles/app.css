@@ -4105,6 +4105,138 @@ body.platform-darwin .app-shell__content {
 }
 
 /* ============================================
+   Debug Command Panel
+   ============================================ */
+
+.debug-command-panel {
+  margin-top: 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.debug-command-panel--muted {
+  opacity: 0.7;
+}
+
+.debug-command-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.debug-command-panel__header:hover {
+  background: rgba(107, 76, 138, 0.06);
+  color: var(--text);
+}
+
+.debug-command-panel__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.debug-command-panel__body {
+  padding: 0 14px 14px;
+  animation: fadeIn 200ms ease;
+}
+
+.debug-command-panel__hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.debug-command-panel__error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--danger);
+}
+
+.debug-command-panel__content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.debug-command-panel__field {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 0.8rem;
+}
+
+.debug-command-panel__field--block {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.debug-command-panel__field > span {
+  flex-shrink: 0;
+  min-width: 72px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.debug-command-panel__field > code {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.debug-command-panel__args {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(30, 26, 35, 0.04);
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.debug-command-panel__arg {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(107, 76, 138, 0.08);
+  color: #6B4C8A;
+  word-break: break-all;
+}
+
+.debug-command-panel__command-line {
+  margin: 0;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(30, 26, 35, 0.04);
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================
    Update Reminder
    ============================================ */
 

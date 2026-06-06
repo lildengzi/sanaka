@@ -118,7 +118,7 @@ function SettingsDrawerSection({
 }
 
 export function SettingsPage() {
-  const { appMeta, settings, persistSettings, importTemplateFromDialog, templates, updateTemplateCatalog, updateCurrentInfo, checkForUpdates } = useAppStore();
+  const { appMeta, settings, persistSettings, importTemplateFromDialog, templates, updateTemplateCatalog, updateCurrentInfo, checkForUpdates, runtimeEnvironment } = useAppStore();
   const t = useT();
   const [params, setParams] = useSearchParams();
   const initialTab = params.get('tab');
@@ -288,6 +288,35 @@ export function SettingsPage() {
                     <p>{t('settings.displayVnc')}</p>
                   </div>
                 </div>
+              </div>
+              <div className="info-panel">
+                <strong>QEMU Runtime</strong>
+                <p style={{ marginBottom: '8px' }}>
+                  {runtimeEnvironment
+                    ? `${runtimeEnvironment.platform} / ${runtimeEnvironment.arch} · accelerators: ${runtimeEnvironment.accelerators.join(', ')}`
+                    : 'Loading runtime environment...'}
+                </p>
+                {runtimeEnvironment ? (
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {Object.entries(runtimeEnvironment.binaries).map(([key, binary]) => (
+                      <div key={key} style={{ borderTop: '1px solid rgba(86, 63, 116, 0.08)', paddingTop: '8px' }}>
+                        <strong>{binary.name}</strong>
+                        <p style={{ margin: '4px 0 0' }}>{binary.version || 'Version unavailable'}</p>
+                        <p style={{ margin: '4px 0 0', wordBreak: 'break-all', opacity: 0.8 }}>{binary.path || 'Not found'}</p>
+                      </div>
+                    ))}
+                    {runtimeEnvironment.searchRoots?.length ? (
+                      <div style={{ borderTop: '1px solid rgba(86, 63, 116, 0.08)', paddingTop: '8px' }}>
+                        <strong>Search Roots</strong>
+                        {runtimeEnvironment.searchRoots.map((root) => (
+                          <p key={root} style={{ margin: '4px 0 0', wordBreak: 'break-all', opacity: 0.8 }}>
+                            {root}
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
                 </SectionCard>
               ) : null}

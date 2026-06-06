@@ -79,6 +79,18 @@ function mockElectronApi() {
     runtime: {
       detectQemu: vi.fn(async () => runtimeEnvironment),
       getRuntimeEnvironment: vi.fn(async () => runtimeEnvironment),
+      previewMachineCommand: vi.fn(async () => ({
+        machineId: 'machine-1',
+        bundlePath: machinePath,
+        configPath: `${machinePath}/machine.svm`,
+        binaryPath: '/usr/bin/qemu-system-x86_64',
+        args: ['-machine', 'pc-q35-9.2'],
+        commandLine: '/usr/bin/qemu-system-x86_64 -machine pc-q35-9.2',
+        accelerator: 'tcg',
+        display: { frontend: 'sanaka' as const, backend: 'vnc' as const, port: 5901, websocketPort: 5700 },
+        qmp: { transport: 'tcp' as const, path: null, host: '127.0.0.1', port: 47001 },
+        environment: runtimeEnvironment
+      })),
       startMachine,
       stopMachine: vi.fn(async () => ({ ok: true })),
       forceStopMachine: vi.fn(async () => ({ ok: true })),

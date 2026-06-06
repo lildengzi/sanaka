@@ -189,7 +189,16 @@ export const resources = {
       runtimeLastError: '错误信息',
       runtimeNoError: '无',
       runtimeNotRunning: '未在运行',
-      qemuMissingHint: '安装 QEMU 后即可启动'
+      qemuMissingHint: '安装 QEMU 后即可启动',
+      debugCommandTitle: '启动命令（调试）',
+      debugCommandBinary: 'QEMU 路径',
+      debugCommandAccelerator: '加速器',
+      debugCommandDisplay: '显示',
+      debugCommandQmp: 'QMP',
+      debugCommandArgs: '参数列表',
+      debugCommandLine: '完整命令行',
+      debugCommandNoPath: '需要先保存虚拟机后才能查看启动命令',
+      debugCommandError: '获取启动命令失败，请检查虚拟机配置是否正确。'
     },
     console: {
       title: 'Sanaka 控制台',
@@ -578,7 +587,16 @@ export const resources = {
       runtimeLastError: 'Error Info',
       runtimeNoError: 'None',
       runtimeNotRunning: 'Not Running',
-      qemuMissingHint: 'Install QEMU to start'
+      qemuMissingHint: 'Install QEMU to start',
+      debugCommandTitle: 'Launch Command (Debug)',
+      debugCommandBinary: 'QEMU Path',
+      debugCommandAccelerator: 'Accelerator',
+      debugCommandDisplay: 'Display',
+      debugCommandQmp: 'QMP',
+      debugCommandArgs: 'Arguments',
+      debugCommandLine: 'Full Command Line',
+      debugCommandNoPath: 'Save the machine first to view the launch command',
+      debugCommandError: 'Failed to get launch command. Please check the machine configuration.'
     },
     console: {
       title: 'Sanaka Console',

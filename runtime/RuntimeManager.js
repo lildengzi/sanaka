@@ -119,6 +119,17 @@ function appendBoundedText(current, chunk, maxLength = 8192) {
   return combined.slice(combined.length - maxLength);
 }
 
+function shellQuote(argument) {
+  const value = String(argument ?? '');
+  if (value.length === 0) {
+    return '""';
+  }
+  if (!/[^\w./:\\-]/.test(value)) {
+    return value;
+  }
+  return `"${value.replace(/(["\\$`])/g, '\\$1')}"`;
+}
+
 function pickPreferredStartupError({ stderr = '', error = null, exitCode = null }) {
   const normalizedStderr = String(stderr || '').trim();
   if (normalizedStderr) {
@@ -189,6 +200,61 @@ class RuntimeManager {
 
   async getRuntimeEnvironment() {
     return this.environment || this.detectQemu();
+  }
+
+  async previewMachineCommand(machinePath) {
+    const environment = await this.detectQemu();
+    const { bundlePath, configPath } = normalizeBundlePath(machinePath);
+    const content = await fsPromises.readFile(configPath, 'utf8');
+    const machine = await normalizeMachinePaths(bundlePath, parseMachineConfig(content));
+
+    const runtimeDir = path.join(this.app.getPath('userData'), 'runtime-preview', machine.id);
+    await fsPromises.mkdir(runtimeDir, { recursive: true });
+
+    const qmpBase = getQmpAddress(this.platform, runtimeDir, machine.id);
+    if (qmpBase.transport === 'tcp') {
+      qmpBase.port = await allocatePort({ start: 47000, end: 47999 });
+    }
+
+    const port = await allocatePort({ start: 5901, end: 5999 });
+    const websocketPort = await allocatePort({ start: 5700, end: 5799 });
+    const displayNumber = port - 5900;
+
+    const buildResult = this.builder.build({
+      machine,
+      environment,
+      runtimePaths: {
+        runtimeDir,
+        qmp: qmpBase
+      },
+      displayConfig: {
+        port,
+        websocketPort,
+        displayNumber
+      },
+      host: {
+        platform: this.platform,
+        arch: this.arch
+      }
+    });
+
+    return {
+      machineId: machine.id,
+      bundlePath,
+      configPath,
+      binaryPath: buildResult.binaryPath,
+      args: [...buildResult.args],
+      commandLine: [buildResult.binaryPath, ...buildResult.args].map(shellQuote).join(' '),
+      accelerator: buildResult.accelerator,
+      display: { ...buildResult.display },
+      qmp: {
+        transport: qmpBase.transport,
+        path: qmpBase.path || null,
+        host: qmpBase.host || null,
+        port: qmpBase.port || null
+      },
+      environment
+    };
   }
 
   async listRunningMachines() {
@@ -705,5 +771,6 @@ module.exports = {
   normalizeBundlePath,
   parseMachineConfig,
   allocatePort,
-  pickPreferredStartupError
+  pickPreferredStartupError,
+  shellQuote
 };

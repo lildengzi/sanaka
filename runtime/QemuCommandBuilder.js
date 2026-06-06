@@ -177,7 +177,7 @@ function defaultMachineType(machineArch) {
     return 'virt';
   }
   if (machineArch === 'x86_64' || machineArch === 'i386') {
-    return 'q35';
+    return 'pc-q35-9.2';
   }
   return '';
 }

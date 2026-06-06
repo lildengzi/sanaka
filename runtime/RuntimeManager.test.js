@@ -110,6 +110,41 @@ describe('RuntimeManager', () => {
     expect(result[0]).not.toHaveProperty('qmpClient');
   });
 
+  it('previews the final qemu command without starting the machine', async () => {
+    const build = vi.fn(() => ({
+      binaryPath: '/opt/homebrew/bin/qemu-system-i386',
+      args: ['-machine', 'pc-i440fx-9.2', '-accel', 'tcg'],
+      accelerator: 'tcg',
+      display: {
+        frontend: 'sanaka',
+        backend: 'vnc',
+        port: 5901,
+        websocketPort: 5700
+      }
+    }));
+    const { manager } = createManager({ builder: { build } });
+
+    const fsModule = await import('fs/promises');
+    const readFileMock = vi.spyOn(fsModule.default || fsModule, 'readFile').mockResolvedValue(`
+kind = "machine"
+id = "vm-preview"
+title = "VM Preview"
+
+[system]
+arch = "i386"
+`);
+
+    const result = await manager.previewMachineCommand('/tmp/VMPreview.saka');
+
+    expect(result.binaryPath).toBe('/opt/homebrew/bin/qemu-system-i386');
+    expect(result.args).toEqual(['-machine', 'pc-i440fx-9.2', '-accel', 'tcg']);
+    expect(result.commandLine).toContain('/opt/homebrew/bin/qemu-system-i386');
+    expect(result.accelerator).toBe('tcg');
+    expect(build).toHaveBeenCalledTimes(1);
+
+    readFileMock.mockRestore();
+  });
+
   it('serializes an already-running machine result', async () => {
     const { manager, registryState } = createManager();
     registryState.set('vm-2', {
