@@ -2,9 +2,11 @@ import { useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { machineRoute } from '../lib/routes';
 import { makeWorkspaceMachineItems, resolveWorkspaceSelection } from '../lib/machine';
+import { parseSakaContent } from '../lib/saka';
 import { useAppStore } from '../store/AppStore';
 import { usePresence } from '../hooks/usePresence';
 import { useT } from '../hooks/useT';
+import { ExportMachineDialog } from './ExportMachineDialog';
 import logoUrl from '../../assets/icons/fish.png';
 
 interface SidebarIconProps {
@@ -84,6 +86,13 @@ export function AppHeader({ onLogoClick }: AppHeaderProps) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: typeof workspace.items[0] } | null>(null);
   const [renameTarget, setRenameTarget] = useState<typeof workspace.items[0] | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [exportMachine, setExportMachine] = useState<{
+    id: string;
+    title: string;
+    author?: string;
+    path?: string;
+    disks?: Array<{ id: string; name: string; path: string }>;
+  } | null>(null);
   const renameModal = usePresence(Boolean(renameTarget));
 
   const navClass = (active: boolean, flash: boolean) => {
@@ -138,6 +147,71 @@ export function AppHeader({ onLogoClick }: AppHeaderProps) {
     setContextMenu(null);
     if (item.path) {
       await duplicateMachine(item.path);
+    }
+  };
+
+  const handleExport = async (item: typeof workspace.items[0]) => {
+    setContextMenu(null);
+    if (!item.path) {
+      return;
+    }
+
+    if (draft?.filePath === item.path) {
+      setExportMachine({
+        id: item.id,
+        title: draft.machine.title,
+        author: draft.machine.author,
+        path: item.path,
+        disks: draft.machine.disks.map((disk) => ({
+          id: disk.id,
+          name: disk.path.split(/[/\\]/).pop() || disk.id,
+          path: disk.path
+        }))
+      });
+      return;
+    }
+
+    try {
+      const opened = await window.electronAPI.files.readSaka(item.path);
+      if (!opened) {
+        setExportMachine({
+          id: item.id,
+          title: item.title,
+          author: item.author,
+          path: item.path
+        });
+        return;
+      }
+
+      const parsed = parseSakaContent(opened.content);
+      if (parsed.kind !== 'machine') {
+        setExportMachine({
+          id: item.id,
+          title: item.title,
+          author: item.author,
+          path: item.path
+        });
+        return;
+      }
+
+      setExportMachine({
+        id: parsed.id,
+        title: parsed.title,
+        author: parsed.author || undefined,
+        path: item.path,
+        disks: parsed.disks.map((disk) => ({
+          id: disk.id,
+          name: disk.path.split(/[/\\]/).pop() || disk.id,
+          path: disk.path
+        }))
+      });
+    } catch {
+      setExportMachine({
+        id: item.id,
+        title: item.title,
+        author: item.author,
+        path: item.path
+      });
     }
   };
 
@@ -216,6 +290,11 @@ export function AppHeader({ onLogoClick }: AppHeaderProps) {
                   <span className={`workspace-sidebar__item-copy${item.missing ? ' workspace-sidebar__item-copy--missing' : ''}`}>
                     <strong>{item.title}</strong>
                     <small>{item.templateLabel ?? t('common.machine')}</small>
+                    {item.author && (
+                      <small style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+                        作者：{item.author}
+                      </small>
+                    )}
                   </span>
                   <span className={item.dirty ? 'workspace-sidebar__item-state workspace-sidebar__item-state--dirty' : 'workspace-sidebar__item-state'}>
                     {item.dirty ? t('common.dirtyShort') : item.missing ? t('home.machineMissing') : t('home.cardStatusSaved')}
@@ -306,6 +385,16 @@ export function AppHeader({ onLogoClick }: AppHeaderProps) {
                   </span>
                   <span>{settings.language === 'zh-CN' ? '打开机器文件夹' : 'Open Folder'}</span>
                 </button>
+                <button className="context-menu__item" type="button" onClick={() => handleExport(contextMenu.item)}>
+                  <span className="context-menu__icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" width="100%" height="100%">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                  </span>
+                  <span>{settings.language === 'zh-CN' ? '导出虚拟机' : 'Export Machine'}</span>
+                </button>
                 <button className="context-menu__item" type="button" onClick={() => handleDuplicate(contextMenu.item)}>
                   <span className="context-menu__icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" width="100%" height="100%">
@@ -368,6 +457,14 @@ export function AppHeader({ onLogoClick }: AppHeaderProps) {
             </form>
           </div>
         </div>
+      )}
+
+      {exportMachine && (
+        <ExportMachineDialog
+          open={Boolean(exportMachine)}
+          onClose={() => setExportMachine(null)}
+          machine={exportMachine}
+        />
       )}
     </>
   );

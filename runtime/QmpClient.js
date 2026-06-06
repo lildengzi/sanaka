@@ -155,6 +155,10 @@ class QmpClient extends EventEmitter {
     return this.execute('query-status');
   }
 
+  queryBlock() {
+    return this.execute('query-block');
+  }
+
   systemPowerdown() {
     return this.execute('system_powerdown');
   }

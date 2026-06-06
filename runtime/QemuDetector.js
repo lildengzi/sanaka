@@ -104,6 +104,19 @@ function makeInstallHint(platform) {
   return 'Install QEMU and ensure the qemu-system binaries are available on PATH.';
 }
 
+function makeSharedFolderInstallHint(platform) {
+  if (platform === 'darwin') {
+    return 'Shared folders need a usable smbd binary. Install Samba or use a QEMU package that provides SMB sharing support.';
+  }
+  if (platform === 'linux') {
+    return 'Shared folders need smbd. Install Samba from your distribution packages.';
+  }
+  if (platform === 'win32') {
+    return 'Shared folders need an smbd helper. Use a QEMU bundle that includes SMB support, or install Samba-compatible tools and restart Sanaka.';
+  }
+  return 'Shared folders need an smbd helper available to QEMU.';
+}
+
 function pushIfString(target, value) {
   if (typeof value === 'string' && value.trim()) {
     target.push(value.trim());
@@ -210,6 +223,19 @@ class QemuDetector {
       .filter(([key, entry]) => key !== 'qemuImg' && entry.found)
       .map(([key]) => key);
 
+    const smbdPath = await resolveBinary('smbd', this.platform, this.env, this.searchRoots);
+    const smbdVersion = smbdPath ? await readVersion(smbdPath, this.execFileImpl) : null;
+    const sharedFolders = {
+      smb: {
+        available: Boolean(smbdPath),
+        backend: 'smb',
+        smbdPath,
+        version: smbdVersion,
+        installHint: makeSharedFolderInstallHint(this.platform),
+        reason: smbdPath ? null : 'Missing smbd helper.'
+      }
+    };
+
     return {
       checkedAt: new Date().toISOString(),
       platform: this.platform,
@@ -219,6 +245,7 @@ class QemuDetector {
       accelerators: inferAccelerators(this.platform),
       installHint: makeInstallHint(this.platform),
       searchRoots: [...this.searchRoots],
+      sharedFolders,
       binaries
     };
   }

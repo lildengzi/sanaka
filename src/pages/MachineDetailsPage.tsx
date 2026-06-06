@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DebugCommandPanel } from '../components/DebugCommandPanel';
 import { MachineVisual } from '../components/MachineVisual';
@@ -57,6 +57,7 @@ export function MachineDetailsPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const t = useT();
+  const pendingConsolePathRef = useRef<string | null>(null);
 
   useEffect(() => {
     const pathParam = params.get('path');
@@ -80,6 +81,15 @@ export function MachineDetailsPage() {
   const qemuAvailable = runtimeEnvironment?.available ?? false;
   const audioHint = makeAudioHint(machine.display.frontend, machine.display.sanaka?.backend ?? settings.runtimeDefaults.displayBackendHint, machine.advanced.audio_backend);
 
+  useEffect(() => {
+    if (!draft?.filePath) return;
+    if (pendingConsolePathRef.current !== draft.filePath) return;
+    if (!runtimeState || (runtimeState.status !== 'starting' && runtimeState.status !== 'running')) return;
+
+    pendingConsolePathRef.current = null;
+    navigate(consoleRoute(runtimeState.machineId, draft.filePath), { replace: true });
+  }, [draft?.filePath, navigate, runtimeState]);
+
   const handlePlayClick = () => {
     if (!draft.filePath || !qemuAvailable) return;
     if (isMachineRunning) {
@@ -88,10 +98,13 @@ export function MachineDetailsPage() {
       });
     } else {
       triggerTransition('launch', async () => {
-        const ok = await startMachine(draft.filePath!);
-        if (ok) {
-          navigate(consoleRoute(machine.id, draft.filePath!));
+        pendingConsolePathRef.current = draft.filePath!;
+        const result = await startMachine(draft.filePath!);
+        if (result.ok) {
+          navigate(consoleRoute(result.machineId ?? machine.id, result.machinePath));
+          return;
         }
+        pendingConsolePathRef.current = null;
       });
     }
   };

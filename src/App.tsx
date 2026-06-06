@@ -69,10 +69,20 @@ function MainLayout() {
   const [logoClickPosition, setLogoClickPosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
-    const disposeOpenSaka = window.electronAPI.app.onOpenSaka(async ({ path }) => {
+    const handleOpenSakaPath = async (path: string) => {
       const result = await openSakaByPath(path);
       if (!result) return;
       navigate(result.kind === 'machine' ? machineRoute(result.machineId, result.path) : '/machines/new');
+    };
+
+    void window.electronAPI.app.consumePendingSakaPaths().then((paths) => {
+      paths.forEach((path) => {
+        void handleOpenSakaPath(path);
+      });
+    });
+
+    const disposeOpenSaka = window.electronAPI.app.onOpenSaka(async ({ path }) => {
+      await handleOpenSakaPath(path);
     });
     const disposeAbout = window.electronAPI.app.onOpenAbout(() => openAboutDialog());
     const disposeSettings = window.electronAPI.app.onOpenSettings(() => navigate('/settings'));

@@ -1,61 +1,121 @@
 # Sanaka Agent Guide
 
-This file tells AI agents how to work inside the `Sanaka` repository.
+这个仓库默认是双 AI 分工协作，不是所有人一起随便改。
 
-Read this together with [工种.md](/Users/steve372dzudo/sanaka/工种.md).
+请和 [工种.md](/Users/steve372dzudo/sanaka/工种.md) 一起阅读。
 
-## Roles
+## 工种
 
-- Frontend AI (`Kimi`, `Gemini`, or similar) owns UI, layout, motion, styling, and renderer-side interaction.
-- Backend AI (`GPT`) owns Electron main process, preload, IPC, file rules, runtime, packaging, and stability work.
+- 前端 AI：`Kimi`、`Gemini` 等
+  - 负责 UI、交互、动画、样式、renderer 侧体验
+- 后端 AI：`GPT`
+  - 负责 Electron main process、preload、IPC、文件系统、runtime、打包、稳定性
 
-Default rule:
+默认原则：
 
-- If the task is mainly visual or interaction-facing, frontend AI should lead.
-- If the task is mainly logic, filesystem, IPC, runtime, build, or packaging, backend AI should lead.
+- 视觉、布局、交互主导的问题，由前端 AI 负责
+- 逻辑、运行时、IPC、文件系统、平台差异、打包主导的问题，由后端 AI 负责
 
-## Handoff
+## 协作文件
 
-Cross-role requests must go through `xx-want.md`.
+### 1. 派单文件：`xx-want.md`
 
-Examples:
+跨工种需求必须通过 `xx-want.md` 传递。
 
-- `gpt-want.md`: GPT writes this when frontend follow-up is needed.
-- `kimi-want.md`: Kimi writes this when backend follow-up is needed.
+例子：
 
-Handoff docs should be short, concrete, and user-facing in outcome. They should say:
+- `gpt-want.md`
+  - GPT 写给前端 AI 的需求
+- `kimi-want.md`
+  - Kimi 写给后端 AI 的需求
 
-- what problem exists
-- what behavior should change
-- what the receiving AI needs to do
-- how to verify completion
+用途：
 
-## Working Rules
+- 明确要改什么
+- 明确问题是什么
+- 明确接收方需要完成什么
+- 明确验收点
 
-- Do not casually rewrite the other role's area just because it is faster.
-- Small cross-boundary fixes are allowed when needed to unblock a bug, but do not change ownership of the feature.
-- If you touch the other side, say so clearly in your handoff or final note.
-- Prefer one side owning one problem at a time instead of two AIs half-editing the same feature.
+### 2. 回写文件：`xx-sendback.md`
 
-## Frontend Notes
+一方完成任务后，必须回写 `xx-sendback.md` 给对方。
 
-- Avoid exposing internal terms like `.saka`, `machine.svm`, bundle roots, IPC details, or raw QEMU flags to end users unless the screen is explicitly advanced/debug.
-- Respect the current product direction: object-first workspace, restrained Material You feel, centered content, and low-noise UI.
-- Before using repository design skills, open the matching `SKILL.md` under `skills-src/` and follow only the parts relevant to the task.
+例子：
 
-## Backend Notes
+- `gpt-sendback.md`
+  - GPT 完成后写给前端 AI
+- `kimi-sendback.md`
+  - Kimi 完成后写给后端 AI
 
-- Keep platform behavior explicit. If macOS, Windows, and Linux differ, encode the rule clearly instead of hiding it in ad-hoc conditionals.
-- Prefer returning structured, user-meaningful errors rather than leaking raw internal failures directly into renderer state.
-- Recent items, machine bundles, runtime state, and packaging behavior must remain consistent with the product rules already established in the repo.
+用途：
 
-## Repository Habits
+- 说明这次到底改了什么
+- 说明哪些地方已经完成
+- 说明哪些地方还没做
+- 说明接下来对方该接什么
+- 避免“以为做了”但其实没做
 
-- Use `rg` for search.
-- Use `apply_patch` for manual edits.
-- Do not revert unrelated user or collaborator changes.
-- Treat the repository as potentially dirty at all times.
+## `xx-want.md` 该怎么写
 
-## Source Of Truth
+要短、具体、可执行。
 
-For role ownership and collaboration expectations, `工种.md` is the main source of truth.
+至少写清楚：
+
+- 当前问题
+- 目标行为
+- 接收方需要做什么
+- 影响哪些文件或模块
+- 怎么验证
+
+不要写成：
+
+- 空泛抱怨
+- 大段理论
+- 只说“你改一下”
+
+## `xx-sendback.md` 该怎么写
+
+至少写清楚：
+
+- 我实际改了什么
+- 我没改什么
+- 现在已经具备哪些能力
+- 对方下一步需要接什么
+- 是否存在风险、兼容点、未完成项
+
+如果只是部分完成，也要明说，不要装作全部完成。
+
+## 工作边界
+
+- 不要因为“顺手”就大改另一个工种的主区域
+- 小范围跨边界修 bug 可以接受，但必须在 `xx-sendback.md` 里说清楚
+- 不要两边同时半改同一个功能，导致 ownership 混乱
+- 一个问题最好只由一侧主导到底，另一侧通过 `xx-want.md` / `xx-sendback.md` 对接
+
+## 前端注意
+
+- 不要对终端用户暴露 `.saka`、`machine.svm`、bundle root、IPC 名称、原始 QEMU 参数，除非是明确的高级/调试视图
+- 尊重当前产品方向：对象优先、低噪音、克制的 Material You 气质、居中工作区
+- 如果要用仓库里的设计 skill，先读对应 `SKILL.md`，只拿当前任务需要的部分
+
+## 后端注意
+
+- 平台差异要显式编码，不要埋成隐性魔法
+- 优先返回结构化、用户向的错误，而不是把内部异常原样扔进 renderer
+- recent、bundle、runtime state、打包行为必须和产品规则保持一致
+
+## 仓库习惯
+
+- 搜索优先 `rg`
+- 手工改文件优先 `apply_patch`
+- 不要回滚别人未授权的改动
+- 默认仓库可能是脏的，随时按脏仓库处理
+
+## 真正的协作顺序
+
+1. 主导方完成自己这一侧改动
+2. 如果需要另一侧配合，写 `xx-want.md`
+3. 接手方完成后写 `xx-sendback.md`
+4. 原主导方根据 `xx-sendback.md` 决定是否继续整合
+
+不要跳过回写步骤。

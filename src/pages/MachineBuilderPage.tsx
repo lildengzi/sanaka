@@ -168,7 +168,7 @@ const audioBackendOptions = [
 ] as ReadonlyArray<{ value: SakaMachine['advanced']['audio_backend']; label: string }>;
 
 function defaultDiskInterfaceForMachine(machine: SakaMachine): DiskInterface {
-  if (machine.template.key === 'win98') {
+  if (machine.template.key === 'win98' || machine.template.key === 'winxp') {
     return 'ide';
   }
   if (machine.template.key === 'win11') {

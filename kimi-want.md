@@ -1,88 +1,35 @@
 # Kimi -> GPT
 
-## 需求：虚拟机文件夹丢失检测与不可用状态 UI
+## 本轮前端改动总结
 
-### 问题背景
-用户会直接删除虚拟机文件夹（而不是通过应用删除）。当文件夹被手动删除后，应用启动时仍然会显示该虚拟机，但点击操作会报错（`ENOENT` / `文件不存在`）。需要优雅处理这种情况。
+### 1. 控制台顶栏下拉菜单
 
-### 需要 GPT 筛查的内容
+**位置：** 控制台顶栏右侧（`console-topbar__right`），位于 info 按钮之后、换盘按钮之前。
 
-请重点检查以下文件和逻辑，确认实现是否正确、完整：
+**改动的文件：**
+- `src/pages/MachineConsolePage.tsx`
+- `src/styles/app.css`
+- `src/i18n/resources.ts`
 
-#### 1. 路径存在性检测
-- **文件**: `src/lib/machine.ts` 中的 `checkMachinePaths()`
-- **问题**: 
-  - 是否正确调用了 `window.electronAPI.files.pathExists()`?
-  - 是否只检测 `source === 'recent'` 且 `path` 存在的条目?
-  - 是否正确设置了 `missing: true`?
+**具体改动：**
+- 移除了原来的"共享文件夹"顶栏按钮（`ShareIcon`）以及相关的 `SharedFolderPanel` 抽屉组件。
+- 新增了一个下拉菜单图标按钮（三个竖点 `MoreIcon`）。
+- 点击后展开下拉菜单，目前菜单中只有一个选项：`检测虚拟机网络 (Windows)`。
+- 点击该选项后，直接调用 `window.electronAPI.runtime.mountBundledTestNetIso(runtimeMachineId)`。
+- 如果调用失败，沿用现有的 `setStartError` 错误反馈机制，弹出错误对话框。
+- 下拉菜单支持点击外部自动关闭。
 
-#### 2. 首页焦点区不可用状态 UI
-- **文件**: `src/pages/HomePage.tsx`
-- **问题**:
-  - `useEffect` 中是否正确调用了 `checkMachinePaths`?
-  - 当 `primaryMachine.missing` 为 `true` 时，是否正确渲染了红 X 图标 + "该虚拟机不可用" 文案 + 删除按钮?
-  - 删除按钮的 `handleDeleteMissing` 是否正确调用了 `deleteMachine`?
-  - `deleteMachine` 是否从 `useAppStore` 中正确解构?
+**没有顺手改动其他控件：** 换盘、重置、电源、缩放、信息按钮均保持原样。
 
-#### 3. Sidebar 列表项丢失状态
-- **文件**: `src/components/AppHeader.tsx`
-- **问题**:
-  - `workspace.items` 是否正确使用了 `checkedItems`（而不是未经检测的 `baseItems`）?
-  - 丢失的条目是否正确添加了 `workspace-sidebar__item--missing` class?
-  - 是否正确设置了 `disabled` 属性?
-  - 点击和右键菜单是否正确禁用了 (`!item.missing && ...`)?
-  - 状态文字是否显示 "该虚拟机不可用"?
-  - 图标和文字是否变红/置灰?
+### 2. 导出对话框对接真实后端 API（上一轮遗留，本轮已验证通过）
 
-#### 4. 删除逻辑
-- **文件**: `src/store/AppStore.tsx` 中的 `deleteMachine()`
-- **问题**:
-  - 是否先调用了 `pathExists` 检测?
-  - 如果文件不存在，是否跳过了 `trashMachineBundle`，直接执行 `recents.remove`?
-  - 是否仍然能正确更新 `recents` state 和 `draft`?
+- `ExportMachineDialog` 已对接 `window.electronAPI.machine.exportMachine(...)`。
+- 进度条由 `machine.onExportProgress` 真实事件驱动。
+- 取消按钮调用 `machine.cancelExport(taskId)`。
+- 完成态等待后端 `completed` 事件。
+- 失败时显示真实错误信息。
+- 已移除 `pickDisk()` 的假文件夹选择行为。
 
-#### 5. 类型定义
-- **文件**: `src/types/electron.d.ts`
-- **问题**: `files.pathExists(path: string): Promise<boolean>` 是否正确定义?
+### 3. TypeScript 编译
 
-- **文件**: `src/domain/schemas.ts`
-- **问题**: `WorkspaceMachineItem` 是否包含 `missing?: boolean`?
-
-#### 6. 样式
-- **文件**: `src/styles/app.css`
-- **问题**:
-  - `.machine-missing-state` 系列样式是否正确（居中、红 X、文案、按钮）?
-  - `.workspace-sidebar__item--missing` 系列样式是否正确（变灰、图标变红、不可点击）?
-
-#### 7. 翻译
-- **文件**: `src/i18n/resources.ts`
-- **问题**: 
-  - 中文: `home.machineMissing` = "该虚拟机不可用", `home.machineMissingDelete` = "删除"
-  - 英文: `home.machineMissing` = "This machine is unavailable", `home.machineMissingDelete` = "Delete"
-  - 是否正确添加?
-
-#### 8. 测试
-- **文件**: 7 个测试文件中的 mock
-- **问题**: `files.pathExists` 是否已添加到所有 `window.electronAPI.files` mock 中?
-
-### 后端 API 需求（需要实现）
-
-**`window.electronAPI.files.pathExists(path: string)`**
-- 接收绝对路径
-- 调用 `fs.existsSync(path)` 或等效方法
-- 返回 `boolean`
-
-### 预期行为
-
-1. 应用启动时，自动检测所有 recent 虚拟机路径
-2. 路径丢失的虚拟机：
-   - 首页焦点区显示红 X + "该虚拟机不可用" + 删除按钮（居中）
-   - Sidebar 条目变灰、图标变红、不可点击、状态显示 "该虚拟机不可用"
-3. 点击删除按钮，直接从 recents 中移除记录（不报错）
-4. 正常的虚拟机不受影响
-
-### 已知问题（需要确认是否修复）
-
-- [ ] `deleteMachine` 在文件夹已删除时，是否还会调用 `trashMachineBundle` 导致报错?
-- [ ] `AppHeader` 中的 `workspace` 是否正确使用了带 `missing` 标记的 items?
-- [ ] `HomePage` 中的 `checkedItems` 是否在 `baseItems` 变化时正确更新?
+本轮改动后 `npx tsc --noEmit` 通过，无新增类型错误。

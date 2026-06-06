@@ -1,3 +1,4 @@
+import fsPromises from 'fs/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { RuntimeManager, pickPreferredStartupError } from './RuntimeManager';
 
@@ -37,7 +38,8 @@ function createManager(overrides = {}) {
 
   const manager = new RuntimeManager({
     app: {
-      getPath: vi.fn(() => '/tmp/sanaka')
+      getPath: vi.fn(() => '/tmp/sanaka'),
+      getAppPath: vi.fn(() => '/tmp/sanaka-app')
     },
     emitEvent: vi.fn(),
     detector,
@@ -231,6 +233,13 @@ arch = "x86_64"
 
   it('changes mounted cdrom media through QMP', async () => {
     const { manager, registryState } = createManager();
+    const queryBlock = vi.fn(async () => [
+      {
+        qdev: 'ide0-1-0',
+        device: 'ide0-1-0',
+        removable: true
+      }
+    ]);
     const blockdevChangeMedium = vi.fn(async () => undefined);
 
     registryState.set('vm-4', {
@@ -251,7 +260,7 @@ arch = "x86_64"
       exitCode: null,
       lastError: null,
       process: { pid: 4444, kill: vi.fn(), exitCode: null, killed: false },
-      qmpClient: { blockdevChangeMedium, close: vi.fn() },
+      qmpClient: { queryBlock, blockdevChangeMedium, close: vi.fn() },
       machine: {
         id: 'vm-4',
         media: {
@@ -264,12 +273,90 @@ arch = "x86_64"
     const result = await manager.changeMedia('vm-4', '/tmp/next.iso', 'cdrom');
 
     expect(result.ok).toBe(true);
+    expect(queryBlock).toHaveBeenCalledTimes(1);
     expect(blockdevChangeMedium).toHaveBeenCalledWith({
-      id: 'cd0',
+      id: 'ide0-1-0',
       filename: '/tmp/next.iso',
       format: 'raw',
       readOnly: true
     });
+  });
+
+  it('falls back across multiple removable media ids until one succeeds', async () => {
+    const { manager, registryState } = createManager();
+    const queryBlock = vi.fn(async () => [
+      {
+        qdev: 'bad-target',
+        device: 'ide1-cd0',
+        removable: true
+      }
+    ]);
+    const blockdevChangeMedium = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('first target failed'))
+      .mockResolvedValueOnce(undefined);
+
+    registryState.set('vm-4b', {
+      machineId: 'vm-4b',
+      bundlePath: '/tmp/VM4b.saka',
+      configPath: '/tmp/VM4b.saka/machine.svm',
+      pid: 4445,
+      status: 'running',
+      startedAt: '2026-06-04T00:00:00.000Z',
+      arch: 'x86_64',
+      displayFrontend: 'sanaka',
+      displayBackend: 'vnc',
+      displayPort: 5905,
+      displayWebSocketPort: 5705,
+      qmpSocketPath: null,
+      qmpTcpPort: 47005,
+      logPath: '/tmp/runtime/vm4b.log',
+      exitCode: null,
+      lastError: null,
+      process: { pid: 4445, kill: vi.fn(), exitCode: null, killed: false },
+      qmpClient: { queryBlock, blockdevChangeMedium, close: vi.fn() },
+      machine: {
+        id: 'vm-4b',
+        media: {
+          iso: '/tmp/original.iso',
+          floppy: ''
+        }
+      }
+    });
+
+    const result = await manager.changeMedia('vm-4b', '/tmp/next.iso', 'cdrom');
+
+    expect(result.ok).toBe(true);
+    expect(blockdevChangeMedium).toHaveBeenNthCalledWith(1, {
+      id: 'bad-target',
+      filename: '/tmp/next.iso',
+      format: 'raw',
+      readOnly: true
+    });
+    expect(blockdevChangeMedium).toHaveBeenNthCalledWith(2, {
+      id: 'ide1-cd0',
+      filename: '/tmp/next.iso',
+      format: 'raw',
+      readOnly: true
+    });
+  });
+
+  it('mounts the bundled testnet iso from the app root when available', async () => {
+    const { manager } = createManager();
+    const accessSpy = vi.spyOn(fsPromises, 'access').mockImplementation(async (targetPath) => {
+      if (String(targetPath) === '/tmp/sanaka-app/testnet.iso') {
+        return undefined;
+      }
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    });
+    const changeMediaSpy = vi.spyOn(manager, 'changeMedia').mockResolvedValue({ ok: true, state: null });
+
+    const result = await manager.mountBundledTestNetIso('vm-testnet');
+
+    expect(result.ok).toBe(true);
+    expect(changeMediaSpy).toHaveBeenCalledWith('vm-testnet', '/tmp/sanaka-app/testnet.iso', 'cdrom');
+
+    accessSpy.mockRestore();
   });
 
   it('waits for a stopping machine to exit before reporting already running', async () => {

@@ -7,6 +7,7 @@ export const diskImageFormatSchema = z.enum(['qcow2', 'qed', 'qcow', 'vmdk', 'vp
 export const diskStorageModeSchema = z.enum(['managed', 'external']);
 export const diskSizeUnitSchema = z.enum(['MB', 'GB']);
 export const diskInterfaceSchema = z.enum(['ide', 'scsi', 'sata', 'virtio']);
+export const sharedFolderModeSchema = z.enum(['readonly', 'readwrite']);
 
 export const templateCatalogEntrySchema = z.object({
   key: z.string(),
@@ -43,6 +44,7 @@ export const recentEntrySchema = z.object({
   title: z.string(),
   path: z.string(),
   kind: z.enum(['machine', 'template']),
+  author: z.string().optional(),
   templateLabel: z.string().optional(),
   previewImageUrl: z.string().optional(),
   updatedAt: z.string(),
@@ -55,6 +57,7 @@ export const sakaMachineSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string().optional().default(''),
+  author: z.string().optional().default(''),
   created_with: z.string().optional().default('Sanaka 0.1'),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
@@ -113,6 +116,12 @@ export const sakaMachineSchema = z.object({
     mode: z.enum(['user', 'bridge']),
     card: z.string()
   }),
+  sharing: z.object({
+    enabled: z.boolean().default(false),
+    hostPath: z.string().default(''),
+    mode: sharedFolderModeSchema.default('readwrite'),
+    shareName: z.string().default('qemu')
+  }),
   display: z.object({
     frontend: displayFrontendSchema,
     gpu: z.string(),
@@ -161,6 +170,12 @@ export const sakaTemplateSchema = z.object({
   system: sakaMachineSchema.shape.system,
   media: sakaMachineSchema.shape.media.optional().default({ iso: '', floppy: '' }),
   network: sakaMachineSchema.shape.network,
+  sharing: sakaMachineSchema.shape.sharing.optional().default({
+    enabled: false,
+    hostPath: '',
+    mode: 'readwrite',
+    shareName: 'qemu'
+  }),
   display: sakaMachineSchema.shape.display,
   peripherals: sakaMachineSchema.shape.peripherals.optional().default({ usb_tablet: true }),
   advanced: sakaMachineSchema.shape.advanced.optional().default({ audio_backend: 'auto', qemu_args: '' })
@@ -192,6 +207,7 @@ export type DiskImageFormat = z.infer<typeof diskImageFormatSchema>;
 export type DiskStorageMode = z.infer<typeof diskStorageModeSchema>;
 export type DiskSizeUnit = z.infer<typeof diskSizeUnitSchema>;
 export type DiskInterface = z.infer<typeof diskInterfaceSchema>;
+export type SharedFolderMode = z.infer<typeof sharedFolderModeSchema>;
 export type AppSettings = z.infer<typeof appSettingsSchema>;
 export type TemplateCatalogEntry = z.infer<typeof templateCatalogEntrySchema>;
 export type RecentEntry = z.infer<typeof recentEntrySchema>;
@@ -203,6 +219,7 @@ export interface WorkspaceMachineItem {
   id: string;
   title: string;
   path?: string;
+  author?: string;
   templateLabel?: string;
   previewImageUrl?: string;
   updatedAt: string;

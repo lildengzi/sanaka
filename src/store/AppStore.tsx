@@ -148,6 +148,12 @@ interface ActivityItem {
   time: string;
 }
 
+interface StartMachineActionResult {
+  ok: boolean;
+  machinePath: string;
+  machineId?: string;
+}
+
 interface AppStoreValue {
   ready: boolean;
   settings: AppSettings;
@@ -177,7 +183,7 @@ interface AppStoreValue {
   runtimeMachines: Awaited<ReturnType<typeof window.electronAPI.runtime.listRunningMachines>>;
   runningMachines: string[];
   getRuntimeStateForMachine: (machineId: string) => RuntimeMachineState | undefined;
-  startMachine: (machinePath: string) => Promise<boolean>;
+  startMachine: (machinePath: string) => Promise<StartMachineActionResult>;
   stopMachine: (id: string) => Promise<boolean>;
   forceStopMachine: (id: string) => Promise<boolean>;
   transition: { active: boolean; type: 'launch' | 'console' | 'delete' };
@@ -736,8 +742,13 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const startMachine = useCallback(
-    async (machinePath: string) => {
-      if (!machinePath) return false;
+    async (machinePath: string): Promise<StartMachineActionResult> => {
+      if (!machinePath) {
+        return {
+          ok: false,
+          machinePath
+        };
+      }
       setStartError(null);
       let resolvedMachinePath = machinePath;
 
@@ -751,7 +762,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
             ),
             ...current
           ]);
-          return false;
+          return {
+            ok: false,
+            machinePath: resolvedMachinePath
+          };
         }
         resolvedMachinePath = savedPath;
       }
@@ -777,7 +791,11 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
           ...current
         ]);
       }
-      return result.ok;
+      return {
+        ok: result.ok,
+        machinePath: resolvedMachinePath,
+        machineId: result.state?.machineId
+      };
     },
     [draft?.dirty, draft?.filePath, saveDraft, settings.language]
   );

@@ -16,6 +16,7 @@ export interface PickedPath {
 export type DiskImageFormat = 'qcow2' | 'qed' | 'qcow' | 'vmdk' | 'vpc' | 'vdi' | 'raw';
 export type DiskSizeUnit = 'MB' | 'GB';
 export type DiskStorageMode = 'managed' | 'external';
+export type SharedFolderMode = 'readonly' | 'readwrite';
 
 export interface DiskImageInfo {
   path: string;
@@ -97,11 +98,27 @@ export interface AppMetadata {
   defaultMachineDirectory: string;
 }
 
+export interface SharedFolderConfig {
+  enabled: boolean;
+  hostPath: string;
+  mode: SharedFolderMode;
+  shareName: string;
+}
+
 export interface QemuBinaryAvailability {
   name: string;
   found: boolean;
   path: string | null;
   version: string | null;
+}
+
+export interface SharedFolderEnvironment {
+  available: boolean;
+  backend: 'smb';
+  smbdPath?: string | null;
+  version?: string | null;
+  installHint?: string;
+  reason?: string | null;
 }
 
 export interface QemuEnvironment {
@@ -113,6 +130,9 @@ export interface QemuEnvironment {
   accelerators: string[];
   installHint: string;
   searchRoots?: string[];
+  sharedFolders?: {
+    smb: SharedFolderEnvironment;
+  };
   binaries: {
     x86_64: QemuBinaryAvailability;
     aarch64: QemuBinaryAvailability;
@@ -124,6 +144,20 @@ export interface QemuEnvironment {
     qemuImg: QemuBinaryAvailability;
     [key: string]: QemuBinaryAvailability;
   };
+}
+
+export interface RuntimeSharedFolderState {
+  enabled: boolean;
+  active: boolean;
+  backend: 'smb';
+  hostPath?: string;
+  guestAddress?: string;
+  guestPath?: string;
+  guestUrl?: string;
+  mode?: SharedFolderMode;
+  pendingRestart?: boolean;
+  warning?: string | null;
+  installHint?: string | null;
 }
 
 export interface RuntimeMachineState {
@@ -143,6 +177,7 @@ export interface RuntimeMachineState {
   logPath: string;
   exitCode: number | null;
   lastError: string | null;
+  sharedFolder?: RuntimeSharedFolderState;
 }
 
 export interface RuntimeCommandPreview {
@@ -224,6 +259,41 @@ export interface TrashMachineBundleResult {
   ok: true;
 }
 
+export interface ExportMachineOptions {
+  sourcePath: string;
+  targetDir: string;
+  name: string;
+  author?: string;
+  includeIso: boolean;
+  selectedDisks: string[];
+  packAsZip: boolean;
+}
+
+export interface ExportProgress {
+  taskId: string;
+  percent: number;
+  phase:
+    | 'preparing'
+    | 'copying_config'
+    | 'copying_iso'
+    | 'copying_disks'
+    | 'updating_metadata'
+    | 'packing'
+    | 'completed'
+    | 'failed';
+  detail?: string;
+  estimatedSeconds?: number;
+  error?: string;
+}
+
+export interface UpdateSharedFolderResult {
+  ok: boolean;
+  config?: SharedFolderConfig;
+  pendingRestart?: boolean;
+  state?: RuntimeMachineState | null;
+  error?: string;
+}
+
 export interface ElectronApi {
   files: {
     openMachineBundle: () => Promise<OpenedSakaFile | null>;
@@ -237,8 +307,10 @@ export interface ElectronApi {
     copyPath: (srcPath: string, destPath: string) => Promise<{ ok: true }>;
     openPath: (path: string) => Promise<{ ok: true }>;
     pathExists: (path: string) => Promise<boolean>;
+    openFolder: (path: string) => Promise<{ ok: true }>;
   };
   dialogs: {
+    selectFolder: () => Promise<PickedPath | null>;
     pickDisk: () => Promise<PickedPath | null>;
     pickIso: () => Promise<PickedPath | null>;
   };
@@ -271,15 +343,23 @@ export interface ElectronApi {
   runtime: {
     detectQemu: () => Promise<QemuEnvironment>;
     getRuntimeEnvironment: () => Promise<QemuEnvironment>;
+    getSharedFolderEnvironment?: () => Promise<SharedFolderEnvironment>;
     previewMachineCommand: (bundlePath: string) => Promise<RuntimeCommandPreview>;
     startMachine: (bundlePath: string) => Promise<StartMachineResult>;
     stopMachine: (machineId: string) => Promise<StopMachineResult>;
     forceStopMachine: (machineId: string) => Promise<StopMachineResult>;
     resetMachine: (payload: ResetMachineRequest) => Promise<StopMachineResult>;
     changeMedia: (payload: ChangeMediaRequest) => Promise<StopMachineResult>;
+    mountBundledTestNetIso?: (machineId: string) => Promise<StopMachineResult>;
     getMachineState: (machineId: string) => Promise<RuntimeMachineState | null>;
     listRunningMachines: () => Promise<RuntimeMachineState[]>;
     onRuntimeEvent: (handler: (payload: RuntimeEvent) => void) => () => void;
+  };
+  machine: {
+    updateSharedFolder?: (machinePath: string, config: SharedFolderConfig) => Promise<UpdateSharedFolderResult>;
+    exportMachine: (options: ExportMachineOptions) => Promise<string>;
+    cancelExport: (taskId: string) => Promise<boolean>;
+    onExportProgress: (handler: (payload: ExportProgress) => void) => () => void;
   };
   updater: {
     getCurrentInfo: () => Promise<UpdateCurrentInfo>;
@@ -290,6 +370,7 @@ export interface ElectronApi {
   };
   app: {
     getMetadata: () => Promise<AppMetadata>;
+    consumePendingSakaPaths: () => Promise<string[]>;
     openExternal: (url: string) => Promise<{ ok: true }>;
     onOpenSaka: (handler: (payload: { path: string }) => void) => () => void;
     onOpenAbout: (handler: () => void) => () => void;

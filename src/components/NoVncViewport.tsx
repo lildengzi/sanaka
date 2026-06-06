@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import RFB from '@novnc/novnc';
 import { useT } from '../hooks/useT';
 
+export type NoVncScaleMode = 'native' | 'fit' | 'stretch';
+
 export type DisplayConnectionState =
   | 'waiting-runtime'
   | 'waiting-display'
@@ -29,11 +31,13 @@ export function NoVncViewport({
   reconnectWindowMs?: number;
   initialDelayMs?: number;
   onConnectionStateChange?: (state: DisplayConnectionState) => void;
-  scaleMode?: 'stretch' | 'fit';
+  scaleMode?: NoVncScaleMode;
 }) {
   const t = useT();
   const mountRef = useRef<HTMLDivElement | null>(null);
   const rfbRef = useRef<RFB | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const originalAbsRef = useRef<{ x?: (x: number) => number; y?: (y: number) => number }>({});
   const reconnectTimerRef = useRef<number | null>(null);
   const initialDelayTimerRef = useRef<number | null>(null);
   const reconnectStartedAtRef = useRef<number | null>(null);
@@ -48,6 +52,81 @@ export function NoVncViewport({
     }
     return `ws://127.0.0.1:${websocketPort}`;
   }, [websocketPort]);
+
+  function applyViewportScale(rfb: RFB) {
+    const target = mountRef.current;
+    if (!target) return;
+
+    const display = (rfb as RFB & {
+      _display?: {
+        _viewportLoc?: { w: number; h: number; x: number; y: number };
+        scale?: number;
+        absX?: (x: number) => number;
+        absY?: (y: number) => number;
+        viewportChangeSize?: (w: number, h: number) => void;
+        resize?: (w: number, h: number) => void;
+      };
+      _screen?: HTMLDivElement;
+    })._display;
+    const screen = (rfb as RFB & { _screen?: HTMLDivElement })._screen;
+
+    if (!display?._viewportLoc) return;
+    originalAbsRef.current.x ??= display.absX;
+    originalAbsRef.current.y ??= display.absY;
+
+    const rect = target.getBoundingClientRect();
+    const viewportWidth = display._viewportLoc.w || 0;
+    const viewportHeight = display._viewportLoc.h || 0;
+
+    if (viewportWidth <= 0 || viewportHeight <= 0 || rect.width <= 0 || rect.height <= 0) {
+      return;
+    }
+
+    const scaleX = rect.width / viewportWidth;
+    const scaleY = rect.height / viewportHeight;
+
+    if (scaleMode === 'fit') {
+      rfb.scaleViewport = true;
+      if (originalAbsRef.current.x) display.absX = originalAbsRef.current.x;
+      if (originalAbsRef.current.y) display.absY = originalAbsRef.current.y;
+      if (screen) {
+        screen.style.alignItems = 'center';
+        screen.style.justifyContent = 'center';
+        screen.style.overflow = 'hidden';
+      }
+      return;
+    }
+
+    rfb.scaleViewport = false;
+
+    const canvas = target.querySelector('canvas') as HTMLCanvasElement | null;
+    if (!canvas) return;
+
+    if (scaleMode === 'native') {
+      if (originalAbsRef.current.x) display.absX = originalAbsRef.current.x;
+      if (originalAbsRef.current.y) display.absY = originalAbsRef.current.y;
+      display.scale = 1;
+      canvas.style.width = `${viewportWidth}px`;
+      canvas.style.height = `${viewportHeight}px`;
+      if (screen) {
+        screen.style.alignItems = 'center';
+        screen.style.justifyContent = 'center';
+        screen.style.overflow = 'auto';
+      }
+      return;
+    }
+
+    display.scale = scaleX;
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+    display.absX = (x: number) => Math.trunc(x / scaleX + (display._viewportLoc?.x ?? 0));
+    display.absY = (y: number) => Math.trunc(y / scaleY + (display._viewportLoc?.y ?? 0));
+    if (screen) {
+      screen.style.alignItems = 'stretch';
+      screen.style.justifyContent = 'stretch';
+      screen.style.overflow = 'hidden';
+    }
+  }
 
   useEffect(() => {
     onConnectionStateChangeRef.current = onConnectionStateChange;
@@ -123,6 +202,7 @@ export function NoVncViewport({
     const handleConnect = () => {
       if (disposed) return;
       reconnectStartedAtRef.current = null;
+      applyViewportScale(rfb);
       setConnectionState('connected');
     };
 
@@ -167,8 +247,18 @@ export function NoVncViewport({
     rfb.addEventListener('credentialsrequired', handleCredentialsRequired);
     rfb.addEventListener('securityfailure', handleSecurityFailure);
 
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = new ResizeObserver(() => {
+        applyViewportScale(rfb);
+      });
+      resizeObserverRef.current.observe(target);
+    }
+
     return () => {
       disposed = true;
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
       if (reconnectTimerRef.current != null) {
         window.clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
@@ -188,10 +278,9 @@ export function NoVncViewport({
   useEffect(() => {
     const rfb = rfbRef.current;
     if (!rfb) return;
-    // fit uses noVNC autoscale to preserve aspect ratio
-    // stretch keeps the local canvas filling the viewport via CSS
     rfb.scaleViewport = scaleMode === 'fit';
     rfb.resizeSession = false;
+    applyViewportScale(rfb);
   }, [scaleMode]);
 
   return (

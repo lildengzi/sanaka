@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { MachineVisual } from '../components/MachineVisual';
 import { StatusChip } from '../components/Field';
@@ -49,6 +49,7 @@ export function HomePage() {
     deleteMachine
   } = useAppStore();
   const t = useT();
+  const pendingConsolePathRef = useRef<string | null>(null);
   const baseItems = useMemo(
     () => makeWorkspaceMachineItems(recents, draft),
     [draft, recents]
@@ -74,6 +75,15 @@ export function HomePage() {
   const machineStatus = runtimeState?.status;
   const isMachineRunning = machineStatus === 'running' || machineStatus === 'starting';
   const qemuAvailable = runtimeEnvironment?.available ?? false;
+
+  useEffect(() => {
+    if (!primaryMachine?.path) return;
+    if (pendingConsolePathRef.current !== primaryMachine.path) return;
+    if (!runtimeState || (runtimeState.status !== 'starting' && runtimeState.status !== 'running')) return;
+
+    pendingConsolePathRef.current = null;
+    navigate(consoleRoute(runtimeState.machineId, primaryMachine.path), { replace: true });
+  }, [navigate, primaryMachine?.path, runtimeState]);
 
   const handleOpenConfig = async () => {
     const result = await openSakaDialog();
@@ -125,11 +135,14 @@ export function HomePage() {
           navigate('/machines/new');
           return;
         }
-        const ok = await startMachine(path);
-        if (ok) {
-          const opened = await openSakaByPath(path);
-          navigate(consoleRoute(opened?.machineId ?? id, path));
+        pendingConsolePathRef.current = path;
+        const result = await startMachine(path);
+        if (result.ok) {
+          const opened = await openSakaByPath(result.machinePath);
+          navigate(consoleRoute(result.machineId ?? opened?.machineId ?? id, result.machinePath));
+          return;
         }
+        pendingConsolePathRef.current = null;
       });
     }
   };

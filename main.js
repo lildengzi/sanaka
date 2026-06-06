@@ -1,7 +1,9 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain, nativeImage, screen, shell } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
+const { parse: parseToml, stringify: stringifyToml } = require('smol-toml');
 const { DiskImageService } = require('./runtime/DiskImageService');
+const { ExportService } = require('./runtime/ExportService');
 const { RuntimeManager } = require('./runtime/RuntimeManager');
 const { UpdateService } = require('./runtime/UpdateService');
 
@@ -27,6 +29,7 @@ let mainWindow = null;
 let pendingSakaPaths = [];
 let runtimeManager = null;
 let diskImageService = null;
+let exportService = null;
 let updateService = null;
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -76,6 +79,10 @@ function emitRuntimeEvent(payload) {
   emitToRenderer('runtime:event', payload);
 }
 
+function emitExportProgress(payload) {
+  emitToRenderer('machine:export-progress', payload);
+}
+
 function getUpdateService() {
   if (!updateService) {
     const forcedLocalVersion = typeof process.env.SANAKA_UPDATE_LOCAL_VERSION === 'string'
@@ -98,6 +105,16 @@ function getUpdateService() {
   return updateService;
 }
 
+function getExportService() {
+  if (!exportService) {
+    exportService = new ExportService({
+      platform: process.platform,
+      emitProgress: emitExportProgress
+    });
+  }
+  return exportService;
+}
+
 function normalizeSakaArg(argv) {
   if (!Array.isArray(argv)) return [];
   return argv
@@ -109,7 +126,16 @@ async function readTextFile(filePath) {
   return fs.readFile(filePath, 'utf8');
 }
 
-async function pathExists(filePath) {
+function normalizeSharedFolderConfig(config = {}) {
+  return {
+    enabled: Boolean(config.enabled),
+    hostPath: String(config.hostPath || ''),
+    mode: config.mode === 'readonly' ? 'readonly' : 'readwrite',
+    shareName: 'qemu'
+  };
+}
+
+async function filePathExists(filePath) {
   try {
     await fs.access(filePath);
     return true;
@@ -166,7 +192,7 @@ async function ensureUniqueBundlePath(rootDirectory, directoryName) {
   let resolvedDirectoryName = directoryName;
   let index = 2;
 
-  while (await pathExists(candidate)) {
+  while (await filePathExists(candidate)) {
     resolvedDirectoryName = `${base} ${index}${ext}`;
     candidate = path.join(rootDirectory, resolvedDirectoryName);
     index += 1;
@@ -204,7 +230,7 @@ async function resolveOpenedConfig(filePath) {
   if (stats.isDirectory()) {
     const configPath = path.join(absolutePath, MACHINE_CONFIG_FILE);
     const content = await readTextFile(configPath);
-    const previewPath = (await pathExists(toBundlePreviewPath(absolutePath))) ? toBundlePreviewPath(absolutePath) : undefined;
+    const previewPath = (await filePathExists(toBundlePreviewPath(absolutePath))) ? toBundlePreviewPath(absolutePath) : undefined;
     return {
       path: absolutePath,
       configPath,
@@ -217,7 +243,7 @@ async function resolveOpenedConfig(filePath) {
   if (isMachineConfigPath(absolutePath)) {
     const bundlePath = path.dirname(absolutePath);
     const content = await readTextFile(absolutePath);
-    const previewPath = (await pathExists(toBundlePreviewPath(bundlePath))) ? toBundlePreviewPath(bundlePath) : undefined;
+    const previewPath = (await filePathExists(toBundlePreviewPath(bundlePath))) ? toBundlePreviewPath(bundlePath) : undefined;
     return {
       path: bundlePath,
       configPath: absolutePath,
@@ -245,6 +271,42 @@ async function openFileByDialog(options) {
   return result.filePaths[0];
 }
 
+function hasAllowedExtension(filePath, allowedExtensions) {
+  const lower = path.basename(filePath).toLowerCase();
+  return allowedExtensions.some((extension) => lower.endsWith(`.${extension.toLowerCase()}`));
+}
+
+async function openAllowedMachinePath({ allowedExtensions, title }) {
+  const selectedPath = await openFileByDialog(
+    process.platform === 'darwin'
+      ? {
+          properties: ['openFile', 'openDirectory'],
+          treatPackageAsDirectory: false
+        }
+      : {
+          properties: ['openFile'],
+          filters: [{ name: title, extensions: allowedExtensions }]
+        }
+  );
+
+  if (!selectedPath) {
+    return null;
+  }
+
+  if (!hasAllowedExtension(selectedPath, allowedExtensions)) {
+    await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['确定'],
+      defaultId: 0,
+      message: '请选择 Sanaka 虚拟机配置',
+      detail: `当前只支持：${allowedExtensions.map((ext) => `.${ext}`).join('、')}`
+    });
+    return null;
+  }
+
+  return selectedPath;
+}
+
 async function openSakaByPath(filePath) {
   return resolveOpenedConfig(filePath);
 }
@@ -255,7 +317,7 @@ async function resolveSaveTarget(targetPath) {
   }
 
   const absolutePath = path.resolve(targetPath);
-  const exists = await pathExists(absolutePath);
+  const exists = await filePathExists(absolutePath);
 
   if (exists) {
     const stats = await fs.stat(absolutePath);
@@ -366,7 +428,6 @@ function createWindow() {
   mainWindow.webContents.on('did-finish-load', () => {
     if (pendingSakaPaths.length > 0) {
       pendingSakaPaths.forEach((filePath) => emitToRenderer('app:open-saka', { path: filePath }));
-      pendingSakaPaths = [];
     }
   });
 }
@@ -464,22 +525,16 @@ const ipcHandlers = {
     return { ok: true };
   },
   async openMachineBundle() {
-    const selectedPath = await openFileByDialog({
-      properties: process.platform === 'darwin' ? ['openFile', 'openDirectory'] : ['openFile'],
-      filters:
-        process.platform === 'darwin'
-          ? [
-              { name: 'Sanaka Machine', extensions: ['saka', 'svm'] },
-              { name: 'Machine Config', extensions: ['svm'] }
-            ]
-          : [{ name: 'Sanaka Machine', extensions: ['svm', 'saka'] }]
+    const selectedPath = await openAllowedMachinePath({
+      allowedExtensions: ['saka', 'svm'],
+      title: 'Sanaka Machine'
     });
     return selectedPath ? openSakaByPath(selectedPath) : null;
   },
   async openSaka() {
-    const selectedPath = await openFileByDialog({
-      properties: ['openFile'],
-      filters: [{ name: 'Sanaka Config', extensions: ['saka', 'svm', 'toml'] }]
+    const selectedPath = await openAllowedMachinePath({
+      allowedExtensions: ['saka', 'svm', 'toml'],
+      title: 'Sanaka Config'
     });
     return selectedPath ? openSakaByPath(selectedPath) : null;
   },
@@ -564,6 +619,30 @@ const ipcHandlers = {
     }
     shell.showItemInFolder(path.resolve(filePath));
     return { ok: true };
+  },
+  async openFolder(_event, folderPath) {
+    if (!folderPath) {
+      throw new Error('Missing folder path');
+    }
+    const absolutePath = path.resolve(folderPath);
+    if (await filePathExists(absolutePath)) {
+      shell.showItemInFolder(absolutePath);
+    } else {
+      shell.showItemInFolder(path.dirname(absolutePath));
+    }
+    return { ok: true };
+  },
+  async pathExists(_event, filePath) {
+    if (!filePath) {
+      return false;
+    }
+    return filePathExists(path.resolve(filePath));
+  },
+  async selectFolder() {
+    const selectedPath = await openFileByDialog({
+      properties: ['openDirectory', 'createDirectory']
+    });
+    return selectedPath ? { path: selectedPath } : null;
   },
   async pickDisk() {
     const selectedPath = await openFileByDialog({
@@ -654,6 +733,11 @@ const ipcHandlers = {
       defaultMachineDirectory
     };
   },
+  consumePendingSakaPaths() {
+    const pending = [...pendingSakaPaths];
+    pendingSakaPaths = [];
+    return pending;
+  },
   async detectQemu() {
     return getRuntimeManager().detectQemu();
   },
@@ -671,6 +755,9 @@ const ipcHandlers = {
   },
   async getRuntimeEnvironment() {
     return getRuntimeManager().getRuntimeEnvironment();
+  },
+  async getSharedFolderEnvironment() {
+    return getRuntimeManager().getSharedFolderEnvironment();
   },
   async previewMachineCommand(_event, bundlePath) {
     return getRuntimeManager().previewMachineCommand(bundlePath);
@@ -690,17 +777,56 @@ const ipcHandlers = {
   async changeMedia(_event, payload) {
     return getRuntimeManager().changeMedia(payload?.machineId, payload?.isoPath, payload?.drive);
   },
+  async mountBundledTestNetIso(_event, machineId) {
+    return getRuntimeManager().mountBundledTestNetIso(machineId);
+  },
   async getMachineState(_event, machineId) {
     return getRuntimeManager().getMachineState(machineId);
   },
   async listRunningMachines() {
     return getRuntimeManager().listRunningMachines();
+  },
+  async updateSharedFolder(_event, machinePath, config) {
+    const { bundlePath, configPath } = normalizeBundlePathForUpdate(machinePath);
+    const content = await fs.readFile(configPath, 'utf8');
+    const machine = parseToml(content);
+    if (machine.kind !== 'machine') {
+      throw new Error('The selected configuration is not a machine package.');
+    }
+
+    machine.sharing = normalizeSharedFolderConfig(config || {});
+    await fs.writeFile(configPath, stringifyToml(machine), 'utf8');
+
+    const result = await getRuntimeManager().updateSharedFolder(bundlePath, machine.sharing);
+    return result;
+  },
+  async exportMachine(_event, options) {
+    return getExportService().exportMachine(options || {});
+  },
+  async cancelExport(_event, taskId) {
+    return getExportService().cancelExport(taskId);
   }
 };
+
+function normalizeBundlePathForUpdate(machinePath) {
+  const absolutePath = path.resolve(machinePath);
+  if (path.basename(absolutePath).toLowerCase() === MACHINE_CONFIG_FILE) {
+    return {
+      bundlePath: path.dirname(absolutePath),
+      configPath: absolutePath
+    };
+  }
+
+  return {
+    bundlePath: absolutePath,
+    configPath: path.join(absolutePath, MACHINE_CONFIG_FILE)
+  };
+}
 
 app.on('open-file', (event, filePath) => {
   event.preventDefault();
   pendingSakaPaths.push(filePath);
+  revealMainWindow();
   emitToRenderer('app:open-saka', { path: filePath });
 });
 
@@ -740,6 +866,9 @@ app.whenReady().then(() => {
   ipcMain.handle('files:rename-path', ipcHandlers.renamePath);
   ipcMain.handle('files:copy-path', ipcHandlers.copyPath);
   ipcMain.handle('files:open-path', ipcHandlers.openPath);
+  ipcMain.handle('files:open-folder', ipcHandlers.openFolder);
+  ipcMain.handle('files:path-exists', ipcHandlers.pathExists);
+  ipcMain.handle('dialogs:select-folder', ipcHandlers.selectFolder);
   ipcMain.handle('dialogs:pick-disk', ipcHandlers.pickDisk);
   ipcMain.handle('dialogs:pick-iso', ipcHandlers.pickIso);
   ipcMain.handle('disks:get-info', ipcHandlers.getDiskInfo);
@@ -755,6 +884,7 @@ app.whenReady().then(() => {
   ipcMain.handle('recents:push', ipcHandlers.pushRecent);
   ipcMain.handle('recents:remove', ipcHandlers.removeRecent);
   ipcMain.handle('app:get-metadata', ipcHandlers.getAppMetadata);
+  ipcMain.handle('app:consume-pending-saka-paths', ipcHandlers.consumePendingSakaPaths);
   ipcMain.handle('app:open-external', ipcHandlers.openExternal);
   ipcMain.handle('updater:get-current-info', ipcHandlers.getUpdaterCurrentInfo);
   ipcMain.handle('updater:check-for-updates', ipcHandlers.checkForUpdates);
@@ -762,14 +892,19 @@ app.whenReady().then(() => {
   ipcMain.handle('updater:open-update-page', ipcHandlers.openUpdatePage);
   ipcMain.handle('runtime:detect-qemu', ipcHandlers.detectQemu);
   ipcMain.handle('runtime:get-environment', ipcHandlers.getRuntimeEnvironment);
+  ipcMain.handle('runtime:get-shared-folder-environment', ipcHandlers.getSharedFolderEnvironment);
   ipcMain.handle('runtime:preview-machine-command', ipcHandlers.previewMachineCommand);
   ipcMain.handle('runtime:start-machine', ipcHandlers.startMachine);
   ipcMain.handle('runtime:stop-machine', ipcHandlers.stopMachine);
   ipcMain.handle('runtime:force-stop-machine', ipcHandlers.forceStopMachine);
   ipcMain.handle('runtime:reset-machine', ipcHandlers.resetMachine);
   ipcMain.handle('runtime:change-media', ipcHandlers.changeMedia);
+  ipcMain.handle('runtime:mount-bundled-testnet-iso', ipcHandlers.mountBundledTestNetIso);
   ipcMain.handle('runtime:get-machine-state', ipcHandlers.getMachineState);
   ipcMain.handle('runtime:list-running-machines', ipcHandlers.listRunningMachines);
+  ipcMain.handle('machine:update-shared-folder', ipcHandlers.updateSharedFolder);
+  ipcMain.handle('machine:export', ipcHandlers.exportMachine);
+  ipcMain.handle('machine:cancel-export', ipcHandlers.cancelExport);
 });
 
 app.on('window-all-closed', () => {

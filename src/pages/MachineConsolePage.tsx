@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/AppStore';
 import { useT } from '../hooks/useT';
-import { NoVncViewport } from '../components/NoVncViewport';
+import { NoVncViewport, type NoVncScaleMode } from '../components/NoVncViewport';
 import { usePresence } from '../hooks/usePresence';
 import { makeAudioHint, makeDisplayHint } from '../lib/machine';
 import { formatRuntimeBackend } from '../lib/console-session';
+
 
 /* ---- icons ---- */
 const ArrowLeftIcon = () => (
@@ -90,18 +91,18 @@ const PowerStatusIcon = () => (
   </svg>
 );
 
-// Stretch/Fill toggle icons
-const StretchIcon = () => (
+const ScaleIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
     <rect x="3" y="3" width="18" height="18" rx="2" />
     <path d="M8 3v18M16 3v18M3 8h18M3 16h18" />
   </svg>
 );
 
-const FitIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-    <rect x="5" y="5" width="14" height="14" rx="2" />
-    <path d="M9 9l3 3-3 3M15 9l-3 3 3 3" />
+const MoreIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+    <circle cx="12" cy="6" r="1.5" />
+    <circle cx="12" cy="12" r="1.5" />
+    <circle cx="12" cy="18" r="1.5" />
   </svg>
 );
 
@@ -126,11 +127,19 @@ export function MachineConsolePage() {
   const navigate = useNavigate();
   const t = useT();
   const [infoOpen, setInfoOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [terminateConfirmOpen, setTerminateConfirmOpen] = useState(false);
-  const [scaleMode, setScaleMode] = useState<'stretch' | 'fit'>('fit');
+  const [scaleMode, setScaleMode] = useState<NoVncScaleMode>('fit');
   const infoDrawer = usePresence(infoOpen, 240);
+  const menuRef = useRef<HTMLDivElement>(null);
   const terminateModal = usePresence(terminateConfirmOpen);
   const pathParam = searchParams.get('path') ?? undefined;
+
+  const scaleOptions: Array<{ value: NoVncScaleMode; label: string }> = [
+    { value: 'native', label: t('console.scaleNative') },
+    { value: 'fit', label: t('console.scaleFit') },
+    { value: 'stretch', label: t('console.scaleStretch') }
+  ];
 
   const {
     draft,
@@ -141,7 +150,8 @@ export function MachineConsolePage() {
     runtimeMachines,
     startMachine,
     forceStopMachine,
-    settings
+    settings,
+    setStartError
   } = useAppStore();
 
   const machineId = rawMachineId ? decodeURIComponent(rawMachineId) : '';
@@ -220,17 +230,44 @@ export function MachineConsolePage() {
   };
 
   const handleChangeDisk = async () => {
-    if (!machinePath) return;
+    if (!machinePath || !runtimeMachineId) return;
     const result = await window.electronAPI.dialogs.pickIso();
     if (result?.path) {
-      // 换盘入口：当前先保留交互结构；后端能力接好后替换实际换盘逻辑
-      console.log('ISO selected for disk swap:', result.path);
+      const changeResult = await window.electronAPI.runtime.changeMedia({
+        machineId: runtimeMachineId,
+        isoPath: result.path,
+        drive: 'cdrom'
+      });
+      if (!changeResult.ok) {
+        setStartError({
+          title: t('console.changeDisk'),
+          description: t('console.runtimeError'),
+          detail: changeResult.error || undefined
+        });
+        return;
+      }
+      if (machinePath) {
+        await openSakaByPath(machinePath);
+      }
     }
   };
 
   const handleBack = () => {
     navigate('/');
   };
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [menuOpen]);
 
   return (
     <div className="page page--console">
@@ -259,15 +296,24 @@ export function MachineConsolePage() {
         </div>
 
         <div className="console-topbar__right">
-          <button
-            className="console-topbar__btn"
-            type="button"
-            onClick={() => setScaleMode((prev) => (prev === 'fit' ? 'stretch' : 'fit'))}
-            title={scaleMode === 'fit' ? t('console.scaleStretch') : t('console.scaleFit')}
-            aria-label={scaleMode === 'fit' ? t('console.scaleStretch') : t('console.scaleFit')}
-          >
-            {scaleMode === 'fit' ? <StretchIcon /> : <FitIcon />}
-          </button>
+          <div className="console-scale-group" role="group" aria-label={t('console.zoom')}>
+            <span className="console-scale-group__icon" aria-hidden="true">
+              <ScaleIcon />
+            </span>
+            {scaleOptions.map((option) => (
+              <button
+                key={option.value}
+                className={option.value === scaleMode ? 'console-scale-chip console-scale-chip--active' : 'console-scale-chip'}
+                type="button"
+                onClick={() => setScaleMode(option.value)}
+                title={option.label}
+                aria-label={option.label}
+                aria-pressed={option.value === scaleMode}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           <button
             className="console-topbar__btn"
             type="button"
@@ -277,6 +323,42 @@ export function MachineConsolePage() {
           >
             <InfoCircleIcon />
           </button>
+          <div className="console-dropdown" ref={menuRef}>
+            <button
+              className="console-topbar__btn"
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              title={t('console.more')}
+              aria-label={t('console.more')}
+              aria-haspopup="true"
+              aria-expanded={menuOpen}
+            >
+              <MoreIcon />
+            </button>
+            {menuOpen && (
+              <div className="console-dropdown__menu" role="menu">
+                <button
+                  className="console-dropdown__item"
+                  type="button"
+                  role="menuitem"
+                  onClick={async () => {
+                    setMenuOpen(false);
+                    if (!runtimeMachineId) return;
+                    const result = await window.electronAPI.runtime.mountBundledTestNetIso!(runtimeMachineId);
+                    if (!result.ok) {
+                      setStartError({
+                        title: t('console.testNetErrorTitle'),
+                        description: t('console.testNetErrorDesc'),
+                        detail: result.error || undefined
+                      });
+                    }
+                  }}
+                >
+                  {t('console.testNetWindows')}
+                </button>
+              </div>
+            )}
+          </div>
           <button
             className="console-topbar__btn"
             type="button"

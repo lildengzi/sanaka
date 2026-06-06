@@ -12,6 +12,24 @@ const { QemuCommandBuilder } = require('./QemuCommandBuilder');
 const MACHINE_CONFIG_FILE = 'machine.svm';
 const STOP_GRACE_TIMEOUT_MS = 8000;
 
+function normalizeSharedFolderConfig(config = {}) {
+  return {
+    enabled: Boolean(config.enabled),
+    hostPath: String(config.hostPath || ''),
+    mode: config.mode === 'readonly' ? 'readonly' : 'readwrite',
+    shareName: 'qemu'
+  };
+}
+
+function sharedFolderConfigEquals(left, right) {
+  const a = normalizeSharedFolderConfig(left);
+  const b = normalizeSharedFolderConfig(right);
+  return a.enabled === b.enabled
+    && a.hostPath === b.hostPath
+    && a.mode === b.mode
+    && a.shareName === b.shareName;
+}
+
 function machineStatusToLifecycle(status) {
   if (status === 'starting' || status === 'stopping' || status === 'resetting' || status === 'paused') {
     return status;
@@ -64,7 +82,10 @@ function parseMachineConfig(content) {
   if (parsed.kind !== 'machine') {
     throw new Error('The selected configuration is not a machine package.');
   }
-  return parsed;
+  return {
+    ...parsed,
+    sharing: normalizeSharedFolderConfig(parsed.sharing || {})
+  };
 }
 
 function resolveDiskPath(bundlePath, disk) {
@@ -202,6 +223,18 @@ class RuntimeManager {
     return this.environment || this.detectQemu();
   }
 
+  async getSharedFolderEnvironment() {
+    const environment = await this.getRuntimeEnvironment();
+    return environment.sharedFolders?.smb || {
+      available: false,
+      backend: 'smb',
+      smbdPath: null,
+      version: null,
+      installHint: 'Shared folders are unavailable.',
+      reason: 'Missing shared folder environment.'
+    };
+  }
+
   async previewMachineCommand(machinePath) {
     const environment = await this.detectQemu();
     const { bundlePath, configPath } = normalizeBundlePath(machinePath);
@@ -263,6 +296,34 @@ class RuntimeManager {
 
   async getMachineState(machineId) {
     return this.#serializeState(this.registry.get(machineId));
+  }
+
+  async updateSharedFolder(machinePath, config) {
+    const { bundlePath, configPath } = normalizeBundlePath(machinePath);
+    const content = await fsPromises.readFile(configPath, 'utf8');
+    const machine = parseMachineConfig(content);
+    const nextConfig = normalizeSharedFolderConfig(config);
+
+    const activeRecord = this.registry.get(machine.id);
+    if (activeRecord) {
+      activeRecord.pendingSharedFolderConfig = sharedFolderConfigEquals(activeRecord.machine?.sharing, nextConfig)
+        ? null
+        : nextConfig;
+      this.registry.set(activeRecord);
+      return {
+        ok: true,
+        config: nextConfig,
+        pendingRestart: Boolean(activeRecord.pendingSharedFolderConfig),
+        state: this.#serializeState(activeRecord)
+      };
+    }
+
+    return {
+      ok: true,
+      config: nextConfig,
+      pendingRestart: false,
+      state: null
+    };
   }
 
   async startMachine(machinePath) {
@@ -334,7 +395,7 @@ class RuntimeManager {
 
     const child = spawn(buildResult.binaryPath, buildResult.args, {
       cwd: bundlePath,
-      env: process.env
+      env: this.#buildChildEnv(environment)
     });
 
     const logStream = fs.createWriteStream(logPath, { flags: 'a' });
@@ -375,6 +436,7 @@ class RuntimeManager {
       process: child,
       qmpClient: null,
       machine,
+      pendingSharedFolderConfig: null,
       logStream
     });
 
@@ -574,28 +636,63 @@ class RuntimeManager {
       return { ok: false, error: 'Machine is not ready for media changes yet.' };
     }
 
-    const targetId = this.#resolveMediaDeviceId(record.machine, drive);
-    if (!targetId) {
+    const targetIds = await this.#resolveMediaDeviceIds(record, drive);
+    if (targetIds.length === 0) {
       return { ok: false, error: `No ${drive} drive is available on this machine.` };
     }
 
+    let lastError = null;
     try {
-      await record.qmpClient.blockdevChangeMedium({
-        id: targetId,
-        filename: isoPath,
-        format: path.extname(isoPath).toLowerCase() === '.iso' ? 'raw' : 'raw',
-        readOnly: true
-      });
-      return { ok: true, state: this.#serializeState(record) };
+      for (const targetId of targetIds) {
+        try {
+          await record.qmpClient.blockdevChangeMedium({
+            id: targetId,
+            filename: isoPath,
+            format: path.extname(isoPath).toLowerCase() === '.iso' ? 'raw' : 'raw',
+            readOnly: true
+          });
+          if (record.machine?.media) {
+            record.machine.media.iso = isoPath;
+          }
+          record.lastError = null;
+          this.registry.set(record);
+          return { ok: true, state: this.#serializeState(record) };
+        } catch (error) {
+          lastError = error;
+        }
+      }
     } catch (error) {
-      record.lastError = error instanceof Error ? error.message : 'Failed to change media.';
-      this.registry.set(record);
+      lastError = error;
+    }
+
+    record.lastError = lastError instanceof Error ? lastError.message : 'Failed to change media.';
+    this.registry.set(record);
+    return {
+      ok: false,
+      error: record.lastError,
+      state: this.#serializeState(record)
+    };
+  }
+
+  async mountBundledTestNetIso(machineId) {
+    const candidates = [];
+    if (typeof this.app?.getAppPath === 'function') {
+      candidates.push(path.join(this.app.getAppPath(), 'testnet.iso'));
+    }
+    if (typeof process.resourcesPath === 'string' && process.resourcesPath.length > 0) {
+      candidates.push(path.join(process.resourcesPath, 'testnet.iso'));
+    }
+
+    const isoPath = await this.#resolveFirstExistingPath(candidates);
+    if (!isoPath) {
       return {
         ok: false,
-        error: record.lastError,
-        state: this.#serializeState(record)
+        error: 'Bundled testnet.iso was not found.',
+        state: this.#serializeState(this.registry.get(machineId))
       };
     }
+
+    return this.changeMedia(machineId, isoPath, 'cdrom');
   }
 
   async dispose() {
@@ -689,6 +786,8 @@ class RuntimeManager {
       return null;
     }
 
+    const sharedFolder = this.#serializeSharedFolder(record);
+
     return {
       machineId: record.machineId,
       bundlePath: record.bundlePath,
@@ -705,16 +804,108 @@ class RuntimeManager {
       qmpTcpPort: record.qmpTcpPort,
       logPath: record.logPath,
       exitCode: record.exitCode,
-      lastError: record.lastError
+      lastError: record.lastError,
+      ...(sharedFolder ? { sharedFolder } : {})
     };
   }
 
-  #resolveMediaDeviceId(machine, drive) {
-    if (drive === 'floppy') {
-      return machine.media?.floppy ? 'floppy0' : null;
+  #serializeSharedFolder(record) {
+    const configured = record.pendingSharedFolderConfig || record.machine?.sharing || null;
+    if (!configured) {
+      return undefined;
     }
 
-    return 'cd0';
+    const enabled = Boolean(configured.enabled && configured.hostPath);
+    const pendingRestart = Boolean(record.pendingSharedFolderConfig);
+    const active = enabled && !pendingRestart && record.status !== 'stopped' && record.machine?.sharing?.enabled;
+
+    return {
+      enabled,
+      active,
+      backend: 'smb',
+      hostPath: configured.hostPath || '',
+      guestAddress: enabled ? '10.0.2.4' : undefined,
+      guestPath: enabled ? 'qemu' : undefined,
+      guestUrl: enabled ? 'smb://10.0.2.4/qemu' : undefined,
+      mode: configured.mode || 'readwrite',
+      pendingRestart,
+      warning:
+        configured.mode === 'readonly'
+          ? 'Read-only shared folders are not supported yet on the current SMB path.'
+          : null,
+      installHint:
+        enabled
+          ? 'Older Windows guests may require adding "10.0.2.4 smbserver" to LMHOSTS, then opening \\\\smbserver\\\\qemu.'
+          : null
+    };
+  }
+
+  #buildChildEnv(environment) {
+    const env = { ...process.env };
+    const smbdPath = environment?.sharedFolders?.smb?.smbdPath;
+    if (!smbdPath) {
+      return env;
+    }
+
+    const helperDir = path.dirname(smbdPath);
+    const currentPath = String(env.PATH || '');
+    const pathEntries = currentPath.split(path.delimiter).filter(Boolean);
+    if (!pathEntries.includes(helperDir)) {
+      env.PATH = [helperDir, ...pathEntries].join(path.delimiter);
+    }
+    return env;
+  }
+
+  async #resolveMediaDeviceIds(record, drive) {
+    if (drive === 'floppy') {
+      return record.machine?.media?.floppy ? ['floppy-device0', 'floppy0'] : [];
+    }
+
+    const qmpClient = record.qmpClient;
+    if (!qmpClient) {
+      return [];
+    }
+
+    const candidates = [];
+    const pushCandidate = (value) => {
+      if (typeof value !== 'string' || !value.trim()) {
+        return;
+      }
+      if (!candidates.includes(value)) {
+        candidates.push(value);
+      }
+    };
+
+    try {
+      const devices = await qmpClient.queryBlock();
+      if (Array.isArray(devices)) {
+        for (const device of devices) {
+          if (!device?.removable) {
+            continue;
+          }
+          pushCandidate(device.qdev);
+          pushCandidate(device.device);
+          pushCandidate(device.inserted?.device);
+          pushCandidate(device.inserted?.node_name);
+          pushCandidate(device.inserted?.nodeName);
+        }
+      }
+    } catch {
+      // Fall back to the stable device ids assigned in the launch command.
+    }
+
+    pushCandidate('cdrom0');
+    pushCandidate('cd0');
+    return candidates;
+  }
+
+  async #resolveFirstExistingPath(candidates) {
+    for (const candidate of candidates) {
+      if (await fileExists(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   #scheduleStopEscalation(record) {

@@ -59,6 +59,7 @@ function makeBaseMachine(id: string, title: string): Omit<SakaMachine, 'template
     kind: 'machine',
     id,
     title,
+    author: '',
     description: '',
     created_with: 'Sanaka 0.1',
     created_at: now(),
@@ -70,6 +71,12 @@ function makeBaseMachine(id: string, title: string): Omit<SakaMachine, 'template
     media: {
       iso: '',
       floppy: ''
+    },
+    sharing: {
+      enabled: false,
+      hostPath: '',
+      mode: 'readwrite',
+      shareName: 'qemu'
     },
     disks: [],
     advanced: {
@@ -90,9 +97,31 @@ export const builtInTemplates: SakaTemplate[] = [
     system: { arch: 'i386', machine_type: 'pc-i440fx-9.2', accelerator: 'tcg', boot_order: 'cdrom', uefi: false, memory_mib: 128, cpu_cores: 1, sound_card: 'sb16' },
     media: { iso: '', floppy: '' },
     network: { enabled: true, mode: 'user', card: 'pcnet' },
+    sharing: { enabled: false, hostPath: '', mode: 'readwrite', shareName: 'qemu' },
     display: {
       frontend: 'sanaka',
       gpu: 'cirrus-vga',
+      sanaka: { backend: 'vnc', scale_mode: 'fit', clipboard: true },
+      spice: { address: '127.0.0.1', port: 5930, clipboard: true, audio: true },
+      vnc: { address: '127.0.0.1', port: 5901, password: '' }
+    },
+    peripherals: { usb_tablet: true },
+    advanced: { audio_backend: 'auto', qemu_args: '' }
+  },
+  {
+    format_version: 1,
+    kind: 'template',
+    id: 'template-winxp',
+    title: 'Windows XP Template',
+    description: 'Compatibility-first machine for Windows XP workloads.',
+    template: { key: 'winxp', label: 'Windows XP' },
+    system: { arch: 'i386', machine_type: 'pc-i440fx-9.2', accelerator: 'tcg', boot_order: 'cdrom', uefi: false, memory_mib: 512, cpu_cores: 1, sound_card: 'ac97' },
+    media: { iso: '', floppy: '' },
+    network: { enabled: true, mode: 'user', card: 'rtl8139' },
+    sharing: { enabled: false, hostPath: '', mode: 'readwrite', shareName: 'qemu' },
+    display: {
+      frontend: 'sanaka',
+      gpu: 'std',
       sanaka: { backend: 'vnc', scale_mode: 'fit', clipboard: true },
       spice: { address: '127.0.0.1', port: 5930, clipboard: true, audio: true },
       vnc: { address: '127.0.0.1', port: 5901, password: '' }
@@ -110,6 +139,7 @@ export const builtInTemplates: SakaTemplate[] = [
     system: { arch: 'x86_64', machine_type: 'pc-q35-9.2', accelerator: 'tcg', boot_order: 'cdrom', uefi: false, memory_mib: 4096, cpu_cores: 2, sound_card: 'intel-hda' },
     media: { iso: '', floppy: '' },
     network: { enabled: true, mode: 'user', card: 'rtl8139' },
+    sharing: { enabled: false, hostPath: '', mode: 'readwrite', shareName: 'qemu' },
     display: {
       frontend: 'sanaka',
       gpu: 'std',
@@ -130,6 +160,7 @@ export const builtInTemplates: SakaTemplate[] = [
     system: { arch: 'x86_64', machine_type: 'pc-q35-9.2', accelerator: 'tcg', boot_order: 'cdrom', uefi: false, memory_mib: 2048, cpu_cores: 2, sound_card: 'intel-hda' },
     media: { iso: '', floppy: '' },
     network: { enabled: true, mode: 'user', card: 'virtio-net-pci' },
+    sharing: { enabled: false, hostPath: '', mode: 'readwrite', shareName: 'qemu' },
     display: {
       frontend: 'sanaka',
       gpu: 'virtio-vga',
@@ -150,6 +181,7 @@ export const builtInTemplates: SakaTemplate[] = [
     system: { arch: 'x86_64', machine_type: 'pc-q35-9.2', accelerator: 'tcg', boot_order: 'disk', uefi: false, memory_mib: 2048, cpu_cores: 2, sound_card: 'intel-hda' },
     media: { iso: '', floppy: '' },
     network: { enabled: true, mode: 'user', card: 'virtio-net-pci' },
+    sharing: { enabled: false, hostPath: '', mode: 'readwrite', shareName: 'qemu' },
     display: {
       frontend: 'sanaka',
       gpu: 'virtio-vga',
@@ -189,6 +221,9 @@ export function createMachineFromTemplateDocument(template: SakaTemplate): SakaM
     template: { ...normalizedTemplate },
     system: { ...template.system, uefi: template.system.uefi ?? false },
     network: { ...template.network },
+    sharing: template.sharing
+      ? { ...template.sharing }
+      : { enabled: false, hostPath: '', mode: 'readwrite', shareName: 'qemu' },
     display: {
       ...template.display,
       frontend: 'sanaka',

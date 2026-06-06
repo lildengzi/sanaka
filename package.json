@@ -29,6 +29,9 @@
     "asar": true,
     "afterPack": "build/after-pack.js",
     "electronDist": "node_modules/electron/dist",
+    "extraResources": [
+      "testnet.iso"
+    ],
     "directories": {
       "output": "release"
     },

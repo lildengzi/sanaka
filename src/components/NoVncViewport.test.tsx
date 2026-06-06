@@ -55,6 +55,14 @@ vi.mock('../hooks/useT', () => ({
     })[key] ?? key
 }));
 
+class MockResizeObserver {
+  observe() {}
+  disconnect() {}
+  unobserve() {}
+}
+
+vi.stubGlobal('ResizeObserver', MockResizeObserver);
+
 describe('NoVncViewport', () => {
   it('keeps display disconnection separate from machine power state and retries clean disconnects', async () => {
     vi.useFakeTimers();

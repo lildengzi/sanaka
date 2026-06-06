@@ -24,7 +24,8 @@ describe('QemuDetector', () => {
       'qemu-system-riscv64',
       'qemu-system-ppc',
       'qemu-system-ppc64',
-      'qemu-img'
+      'qemu-img',
+      'smbd'
     ].forEach((name) => touchExecutable(path.join(bundledBinDir, name)));
 
     const detector = new QemuDetector({
@@ -42,6 +43,8 @@ describe('QemuDetector', () => {
     expect(result.binaries.arm.path).toBe(path.join(bundledBinDir, 'qemu-system-arm'));
     expect(result.binaries.ppc64.path).toBe(path.join(bundledBinDir, 'qemu-system-ppc64'));
     expect(result.binaries.qemuImg.path).toBe(path.join(bundledBinDir, 'qemu-img'));
+    expect(result.sharedFolders?.smb.available).toBe(true);
+    expect(result.sharedFolders?.smb.smbdPath).toBe(path.join(bundledBinDir, 'smbd'));
   });
 
   it('finds qemu from common Windows install folders even when PATH is empty', async () => {

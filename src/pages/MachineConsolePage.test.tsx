@@ -60,9 +60,11 @@ describe('MachineConsolePage', () => {
         renamePath: vi.fn(async () => ({ ok: true as const })),
         copyPath: vi.fn(async () => ({ ok: true as const })),
         openPath: vi.fn(async () => ({ ok: true as const })),
+        openFolder: vi.fn(),
         pathExists: vi.fn(async () => true)
       },
       dialogs: {
+        selectFolder: vi.fn(async () => null),
         pickDisk: vi.fn(async () => null),
         pickIso: vi.fn(async () => null)
       },
@@ -108,6 +110,11 @@ describe('MachineConsolePage', () => {
         listRunningMachines: vi.fn(async () => []),
         onRuntimeEvent: vi.fn(() => () => undefined)
       },
+      machine: {
+        exportMachine: vi.fn(async () => 'export-task-1'),
+        cancelExport: vi.fn(async () => true),
+        onExportProgress: vi.fn(() => () => undefined)
+      },
       updater: {
         getCurrentInfo: vi.fn(async () => ({ currentVersion: '1.0.0', currentChannel: 'release' as const, skippedVersion: '' })),
         checkForUpdates: vi.fn(async () => ({ currentVersion: '1.0.0', currentChannel: 'release' as const, hasUpdate: false, skippedVersion: '' })),
@@ -125,6 +132,7 @@ describe('MachineConsolePage', () => {
           documentsPath: '/tmp/Documents',
           defaultMachineDirectory: '/tmp/Documents/Sanaka'
         })),
+        consumePendingSakaPaths: vi.fn(async () => []),
         openExternal: vi.fn(async () => ({ ok: true as const })),
         onOpenSaka: vi.fn(() => () => undefined),
         onOpenAbout: vi.fn(() => () => undefined),
@@ -186,9 +194,11 @@ describe('MachineConsolePage', () => {
         renamePath: vi.fn(async () => ({ ok: true as const })),
         copyPath: vi.fn(async () => ({ ok: true as const })),
         openPath: vi.fn(async () => ({ ok: true as const })),
+        openFolder: vi.fn(),
         pathExists: vi.fn(async () => true)
       },
       dialogs: {
+        selectFolder: vi.fn(async () => null),
         pickDisk: vi.fn(async () => null),
         pickIso: vi.fn(async () => null)
       },
@@ -234,6 +244,11 @@ describe('MachineConsolePage', () => {
         listRunningMachines: vi.fn(async () => [runtimeState]),
         onRuntimeEvent: vi.fn(() => () => undefined)
       },
+      machine: {
+        exportMachine: vi.fn(async () => 'export-task-1'),
+        cancelExport: vi.fn(async () => true),
+        onExportProgress: vi.fn(() => () => undefined)
+      },
       updater: {
         getCurrentInfo: vi.fn(async () => ({ currentVersion: '1.0.0', currentChannel: 'release' as const, skippedVersion: '' })),
         checkForUpdates: vi.fn(async () => ({ currentVersion: '1.0.0', currentChannel: 'release' as const, hasUpdate: false, skippedVersion: '' })),
@@ -251,6 +266,7 @@ describe('MachineConsolePage', () => {
           documentsPath: '/tmp/Documents',
           defaultMachineDirectory: '/tmp/Documents/Sanaka'
         })),
+        consumePendingSakaPaths: vi.fn(async () => []),
         openExternal: vi.fn(async () => ({ ok: true as const })),
         onOpenSaka: vi.fn(() => () => undefined),
         onOpenAbout: vi.fn(() => () => undefined),

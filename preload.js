@@ -20,9 +20,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     trashMachineBundle: (path) => ipcRenderer.invoke('files:trash-machine-bundle', path),
     renamePath: (oldPath, newPath) => ipcRenderer.invoke('files:rename-path', { oldPath, newPath }),
     copyPath: (srcPath, destPath) => ipcRenderer.invoke('files:copy-path', { srcPath, destPath }),
-    openPath: (path) => ipcRenderer.invoke('files:open-path', path)
+    openPath: (path) => ipcRenderer.invoke('files:open-path', path),
+    openFolder: (path) => ipcRenderer.invoke('files:open-folder', path),
+    pathExists: (path) => ipcRenderer.invoke('files:path-exists', path)
   },
   dialogs: {
+    selectFolder: () => ipcRenderer.invoke('dialogs:select-folder'),
     pickDisk: () => ipcRenderer.invoke('dialogs:pick-disk'),
     pickIso: () => ipcRenderer.invoke('dialogs:pick-iso')
   },
@@ -47,15 +50,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   runtime: {
     detectQemu: () => ipcRenderer.invoke('runtime:detect-qemu'),
     getRuntimeEnvironment: () => ipcRenderer.invoke('runtime:get-environment'),
+    getSharedFolderEnvironment: () => ipcRenderer.invoke('runtime:get-shared-folder-environment'),
     previewMachineCommand: (bundlePath) => ipcRenderer.invoke('runtime:preview-machine-command', bundlePath),
     startMachine: (bundlePath) => ipcRenderer.invoke('runtime:start-machine', bundlePath),
     stopMachine: (machineId) => ipcRenderer.invoke('runtime:stop-machine', machineId),
     forceStopMachine: (machineId) => ipcRenderer.invoke('runtime:force-stop-machine', machineId),
     resetMachine: (payload) => ipcRenderer.invoke('runtime:reset-machine', payload),
     changeMedia: (payload) => ipcRenderer.invoke('runtime:change-media', payload),
+    mountBundledTestNetIso: (machineId) => ipcRenderer.invoke('runtime:mount-bundled-testnet-iso', machineId),
     getMachineState: (machineId) => ipcRenderer.invoke('runtime:get-machine-state', machineId),
     listRunningMachines: () => ipcRenderer.invoke('runtime:list-running-machines'),
     onRuntimeEvent: (handler) => on('runtime:event', handler)
+  },
+  machine: {
+    updateSharedFolder: (machinePath, config) => ipcRenderer.invoke('machine:update-shared-folder', machinePath, config),
+    exportMachine: (options) => ipcRenderer.invoke('machine:export', options),
+    cancelExport: (taskId) => ipcRenderer.invoke('machine:cancel-export', taskId),
+    onExportProgress: (handler) => on('machine:export-progress', handler)
   },
   updater: {
     getCurrentInfo: () => ipcRenderer.invoke('updater:get-current-info'),
@@ -66,6 +77,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   app: {
     getMetadata: () => ipcRenderer.invoke('app:get-metadata'),
+    consumePendingSakaPaths: () => ipcRenderer.invoke('app:consume-pending-saka-paths'),
     openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
     onOpenSaka: (handler) => on('app:open-saka', handler),
     onOpenAbout: (handler) => on('app:open-about', handler),

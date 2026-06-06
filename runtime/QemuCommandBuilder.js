@@ -62,6 +62,11 @@ function guestFamily(guestArch) {
   return guestArch;
 }
 
+function isQemu1100(versionString) {
+  const version = String(versionString || '');
+  return /\b11\.0\.0\b/.test(version);
+}
+
 function hostFamily(hostArch) {
   if (hostArch === 'x64' || hostArch === 'ia32') {
     return 'x86';
@@ -190,6 +195,44 @@ function ensureFile(filePath) {
   return typeof filePath === 'string' && filePath.length > 0 && fs.existsSync(filePath);
 }
 
+function buildSharedFolderArgs(machine, environment, host) {
+  const sharing = machine.sharing || {};
+  if (!sharing.enabled || !sharing.hostPath) {
+    return [];
+  }
+
+  if (!machine.network?.enabled) {
+    throw new Error('Shared folders require network to be enabled.');
+  }
+
+  if (machine.network.mode !== 'user') {
+    throw new Error('Shared folders are only available with user-mode networking in the first version.');
+  }
+
+  if (sharing.mode === 'readonly') {
+    throw new Error('Read-only shared folders are not supported yet on the current SMB path.');
+  }
+
+  if (!environment.sharedFolders?.smb?.available) {
+    throw new Error(environment.sharedFolders?.smb?.installHint || 'Shared folders are unavailable because no SMB helper was found.');
+  }
+
+  const resolvedHostPath = path.resolve(sharing.hostPath);
+  if (!fs.existsSync(resolvedHostPath)) {
+    throw new Error('The selected shared folder does not exist anymore.');
+  }
+
+  if (resolvedHostPath.includes(',')) {
+    throw new Error('Shared folder paths cannot contain commas on the current SMB path.');
+  }
+
+  if (host.platform === 'win32') {
+    return [`smb=${resolvedHostPath.replace(/\\/g, '/')}`];
+  }
+
+  return [`smb=${resolvedHostPath}`];
+}
+
 function resolveQemuShareDir(binaryPath) {
   const candidates = [
     path.resolve(path.dirname(binaryPath), '../share/qemu'),
@@ -264,6 +307,10 @@ class QemuCommandBuilder {
       args.push('-machine', machineType);
     }
 
+    if (guestFamily(guestArch) === 'x86' && isQemu1100(binary.version)) {
+      args.push('-global', 'apic.vapic=off');
+    }
+
     args.push('-accel', accelerator !== 'tcg' ? accelerator : 'tcg');
 
     args.push('-m', String(machine.system?.memory_mib || 2048));
@@ -289,11 +336,11 @@ class QemuCommandBuilder {
     args.push(...buildDisplayArgs(guestArch, machine.display.gpu));
 
     args.push('-drive', `if=none,id=cd0,media=cdrom,readonly=on,file=${machine.media?.iso || ''}`);
-    args.push('-device', 'ide-cd,drive=cd0');
+    args.push('-device', 'ide-cd,id=cdrom0,drive=cd0');
 
     if (machine.media?.floppy) {
       args.push('-drive', `if=none,id=floppy0,media=disk,format=raw,file=${machine.media.floppy}`);
-      args.push('-device', 'floppy,drive=floppy0');
+      args.push('-device', 'floppy,id=floppy-device0,drive=floppy0');
     }
 
     let needsScsiController = false;
@@ -339,10 +386,11 @@ class QemuCommandBuilder {
         throw new Error('Bridge networking is only supported in the first runtime version on Linux hosts.');
       }
 
-      const netdev =
+      const netdevParts =
         machine.network.mode === 'bridge'
-          ? 'bridge,id=net0'
-          : 'user,id=net0';
+          ? ['bridge,id=net0']
+          : ['user,id=net0', ...buildSharedFolderArgs(machine, environment, host)];
+      const netdev = netdevParts.join(',');
       args.push('-netdev', netdev, '-device', `${machine.network.card},netdev=net0`);
     }
 
