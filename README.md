@@ -45,10 +45,18 @@ bash start.sh
 
 ## 🩺 环境修复
 
-如果 `npm install`、Electron 下载、镜像配置这些地方出问题，可以直接运行：
+建议你直接运行：
 
 ```bash
 bash scripts/doctor.sh
 ```
 
 它会测速多个 npm / Electron 镜像，确认后帮你切换，并自动尝试修复依赖与构建问题。
+
+## Sanaka 的内部...
+
+<div align="center">
+<img src="./assets/icons/sanakafishpackage.png" width="200">
+</div>
+
+这是 **Sanaka SVM/SAKA 格式的机器包**：点击后，Sanaka就会立刻配置好虚拟机。
