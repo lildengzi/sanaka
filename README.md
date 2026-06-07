@@ -48,7 +48,7 @@ bash start.sh
 如果 `npm install`、Electron 下载、镜像配置这些地方出问题，可以直接运行：
 
 ```bash
-sh doctor
+bash scripts/doctor.sh
 ```
 
 它会测速多个 npm / Electron 镜像，确认后帮你切换，并自动尝试修复依赖与构建问题。
