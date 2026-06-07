@@ -15,6 +15,8 @@ MENU_MODE="false"
 NPM_REGISTRY=""
 ELECTRON_MIRROR_URL=""
 CURRENT_ELECTRON_VERSION=""
+declare -a DOCTOR_ISSUES=()
+declare -a DOCTOR_FIXES=()
 
 NPM_CANDIDATES=(
   "https://registry.npmjs.org"
@@ -45,6 +47,14 @@ for arg in "$@"; do
   esac
 done
 
+add_issue() {
+  DOCTOR_ISSUES+=("$1")
+}
+
+add_fix() {
+  DOCTOR_FIXES+=("$1")
+}
+
 log() {
   printf '%s\n' "$1"
 }
@@ -60,6 +70,49 @@ require_command() {
     log "$hint"
     exit 1
   fi
+}
+
+has_command() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+critical_scripts=(
+  "doctor"
+  "scripts/doctor.sh"
+  "scripts/pull-main.sh"
+  "scripts/pull-main-windows.sh"
+)
+
+restore_tracked_script_if_missing() {
+  local relative_path="$1"
+  local absolute_path="$ROOT_DIR/$relative_path"
+
+  if [[ -f "$absolute_path" ]]; then
+    return 0
+  fi
+
+  if ! has_command git; then
+    return 1
+  fi
+
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 1
+  fi
+
+  if ! git cat-file -e "HEAD:$relative_path" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  mkdir -p "$(dirname "$absolute_path")"
+  git show "HEAD:$relative_path" >"$absolute_path"
+  chmod +x "$absolute_path" 2>/dev/null || true
+}
+
+repair_critical_scripts() {
+  local script_path
+  for script_path in "${critical_scripts[@]}"; do
+    restore_tracked_script_if_missing "$script_path" || true
+  done
 }
 
 trim_trailing_slash() {
@@ -125,6 +178,10 @@ write_user_npmrc_key() {
 
   printf '%s="%s"\n' "$key" "$value" >>"$temp_path"
   mv "$temp_path" "$npmrc_path"
+}
+
+run_quiet_check() {
+  "$@" >/tmp/sanaka-doctor-check.log 2>&1
 }
 
 print_current_config() {
@@ -338,6 +395,137 @@ run_repair_flow() {
   fi
 }
 
+switch_language_menu() {
+  local choice
+  printf '\n%s\n' "$(sanaka_t "doctor.language_menu_title")"
+  sanaka_printf_ln "doctor.language_menu_1"
+  sanaka_printf_ln "doctor.language_menu_2"
+  while true; do
+    sanaka_printf "doctor.language_prompt"
+    read -r choice || return 0
+    case "$choice" in
+      1)
+        sanaka_set_lang "zh-CN"
+        sanaka_log "common.language_switched" "zh-CN"
+        return 0
+        ;;
+      2)
+        sanaka_set_lang "en-US"
+        sanaka_log "common.language_switched" "en-US"
+        return 0
+        ;;
+      *)
+        sanaka_log "doctor.language_invalid"
+        ;;
+    esac
+  done
+}
+
+scan_repository_issues() {
+  local required_file required_dir script_path
+  DOCTOR_ISSUES=()
+  DOCTOR_FIXES=()
+
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    add_issue "$(sanaka_t "doctor.full_scan_issue_git_repo")"
+    return 0
+  fi
+
+  for required_file in package.json main.js preload.js tsconfig.json vite.config.ts; do
+    [[ -f "$ROOT_DIR/$required_file" ]] || add_issue "$(sanaka_printf_capture "doctor.full_scan_issue_missing_file" "$required_file")"
+  done
+
+  for required_dir in src runtime scripts assets build; do
+    [[ -d "$ROOT_DIR/$required_dir" ]] || add_issue "$(sanaka_printf_capture "doctor.full_scan_issue_missing_dir" "$required_dir")"
+  done
+
+  for script_path in "${critical_scripts[@]}"; do
+    if [[ ! -f "$ROOT_DIR/$script_path" ]]; then
+      add_issue "$(sanaka_printf_capture "doctor.full_scan_issue_missing_critical_script" "$script_path")"
+      add_fix "$(sanaka_t "doctor.full_scan_fix_scripts")"
+    fi
+  done
+
+  has_command git || add_issue "$(sanaka_printf_capture "doctor.full_scan_issue_missing_cmd" "git")"
+  has_command node || add_issue "$(sanaka_printf_capture "doctor.full_scan_issue_missing_cmd" "node")"
+  has_command npm || add_issue "$(sanaka_printf_capture "doctor.full_scan_issue_missing_cmd" "npm")"
+  has_command curl || add_issue "$(sanaka_printf_capture "doctor.full_scan_issue_missing_cmd" "curl")"
+
+  [[ -f "$ROOT_DIR/package-lock.json" ]] || {
+    add_issue "$(sanaka_t "doctor.full_scan_issue_missing_lockfile")"
+    add_fix "$(sanaka_t "doctor.full_scan_fix_lockfile")"
+  }
+
+  [[ -d "$ROOT_DIR/node_modules/electron/dist" ]] || {
+    add_issue "$(sanaka_t "doctor.full_scan_issue_missing_electron_dist")"
+    add_fix "$(sanaka_t "doctor.full_scan_fix_deps")"
+  }
+
+  run_quiet_check node --check main.js || add_issue "$(sanaka_t "doctor.full_scan_issue_main_check")"
+  run_quiet_check node --check preload.js || add_issue "$(sanaka_t "doctor.full_scan_issue_preload_check")"
+  run_quiet_check npm run typecheck || add_issue "$(sanaka_t "doctor.full_scan_issue_typecheck")"
+  run_quiet_check npm test || add_issue "$(sanaka_t "doctor.full_scan_issue_tests")"
+  run_quiet_check npm run build || {
+    add_issue "$(sanaka_t "doctor.full_scan_issue_build")"
+    add_fix "$(sanaka_t "doctor.full_scan_fix_build")"
+    add_fix "$(sanaka_t "doctor.full_scan_fix_deps")"
+  }
+
+  if [[ -n "$(git status --porcelain)" ]]; then
+    add_issue "$(sanaka_t "doctor.full_scan_issue_dirty_repo")"
+    add_fix "$(sanaka_t "doctor.full_scan_fix_none")"
+  fi
+}
+
+sanaka_printf_capture() {
+  local key="$1"
+  shift
+  printf "$(sanaka_t "$key")" "$@"
+}
+
+print_scan_report() {
+  local issue fix
+  sanaka_section "doctor.full_scan_title"
+  if [[ "${#DOCTOR_ISSUES[@]}" -eq 0 ]]; then
+    sanaka_log "doctor.full_scan_no_issues"
+  else
+    sanaka_log "doctor.full_scan_issue_header"
+    for issue in "${DOCTOR_ISSUES[@]}"; do
+      printf ' - %s\n' "$issue"
+    done
+  fi
+
+  if [[ "${#DOCTOR_FIXES[@]}" -gt 0 ]]; then
+    printf '\n'
+    for fix in "${DOCTOR_FIXES[@]}"; do
+      printf ' * %s\n' "$fix"
+    done | awk '!seen[$0]++'
+  fi
+}
+
+run_full_diagnostics() {
+  scan_repository_issues
+  print_scan_report
+
+  if [[ "${#DOCTOR_ISSUES[@]}" -eq 0 ]]; then
+    sanaka_log "doctor.full_scan_done"
+    return 0
+  fi
+
+  if confirm "$(sanaka_t "doctor.full_scan_auto_prompt")"; then
+    sanaka_log "doctor.full_scan_fixing"
+    repair_critical_scripts
+    test_and_offer_best_mirrors || true
+    run_repair_flow
+    run_quiet_check npm run typecheck || true
+    run_quiet_check npm test || true
+    run_quiet_check node --check main.js || true
+    run_quiet_check node --check preload.js || true
+  fi
+
+  sanaka_log "doctor.full_scan_done"
+}
+
 print_menu() {
   printf '\n%s\n' "$(sanaka_t "doctor.title")"
   sanaka_printf_ln "doctor.menu_1"
@@ -345,6 +533,8 @@ print_menu() {
   sanaka_printf_ln "doctor.menu_3"
   sanaka_printf_ln "doctor.menu_4"
   sanaka_printf_ln "doctor.menu_5"
+  sanaka_printf_ln "doctor.menu_6"
+  sanaka_printf_ln "doctor.menu_7"
   printf '\n'
 }
 
@@ -352,7 +542,7 @@ run_menu() {
   local choice
   while true; do
     print_menu
-    sanaka_printf "common.select_1_5"
+    sanaka_printf "common.select_1_7"
     read -r choice || exit 0
     case "$choice" in
       1)
@@ -375,17 +565,24 @@ run_menu() {
         print_current_config
         ;;
       5)
+        switch_language_menu
+        ;;
+      6)
+        run_full_diagnostics
+        ;;
+      7)
         sanaka_log "common.exit"
         return 0
         ;;
       *)
-        sanaka_log "common.invalid_1_5"
+        sanaka_log "common.invalid_1_7"
         ;;
     esac
   done
 }
 
 main() {
+  repair_critical_scripts
   sanaka_log "common.current_directory" "$ROOT_DIR"
 
   require_command git "$(sanaka_t "doctor.missing_git")"

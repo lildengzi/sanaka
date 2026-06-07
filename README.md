@@ -25,6 +25,18 @@
 
 前往 [Releases](https://github.com/steve372a/sanaka/releases) 下载最新版适合您系统的包。
 
+## 📦 源码构建
+
+参见 [从零开始的构建指南](./从零开始的构建指南.md)
+
+您可以在本地快速上手：
+
+```
+git clone https://github.com/steve372a/sanaka.git
+cd sanaka
+bash start.sh
+```
+
 ## 📚 文档入口
 
 - [从零开始的构建指南](./从零开始的构建指南.md)

@@ -6,6 +6,13 @@ fi
 
 SANAKA_I18N_LOADED="1"
 
+sanaka_clear_i18n_messages() {
+  local var_name
+  while IFS= read -r var_name; do
+    unset "$var_name"
+  done < <(compgen -A variable SANAKA_I18N_ || true)
+}
+
 sanaka_i18n_put() {
   local key="$1"
   local value="$2"
@@ -46,12 +53,19 @@ sanaka_load_i18n() {
   locale_dir="$lib_dir/../locales"
   selected_lang="$(sanaka_detect_lang)"
 
+  sanaka_clear_i18n_messages
   source "$locale_dir/en-US.sh"
   if [[ "$selected_lang" != "en-US" && -f "$locale_dir/$selected_lang.sh" ]]; then
     source "$locale_dir/$selected_lang.sh"
   fi
 
   export SANAKA_ACTIVE_LANG="$selected_lang"
+}
+
+sanaka_set_lang() {
+  local next_lang="$1"
+  export SANAKA_LANG="$next_lang"
+  sanaka_load_i18n
 }
 
 sanaka_t() {
