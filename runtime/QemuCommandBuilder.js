@@ -195,44 +195,6 @@ function ensureFile(filePath) {
   return typeof filePath === 'string' && filePath.length > 0 && fs.existsSync(filePath);
 }
 
-function buildSharedFolderArgs(machine, environment, host) {
-  const sharing = machine.sharing || {};
-  if (!sharing.enabled || !sharing.hostPath) {
-    return [];
-  }
-
-  if (!machine.network?.enabled) {
-    throw new Error('Shared folders require network to be enabled.');
-  }
-
-  if (machine.network.mode !== 'user') {
-    throw new Error('Shared folders are only available with user-mode networking in the first version.');
-  }
-
-  if (sharing.mode === 'readonly') {
-    throw new Error('Read-only shared folders are not supported yet on the current SMB path.');
-  }
-
-  if (!environment.sharedFolders?.smb?.available) {
-    throw new Error(environment.sharedFolders?.smb?.installHint || 'Shared folders are unavailable because no SMB helper was found.');
-  }
-
-  const resolvedHostPath = path.resolve(sharing.hostPath);
-  if (!fs.existsSync(resolvedHostPath)) {
-    throw new Error('The selected shared folder does not exist anymore.');
-  }
-
-  if (resolvedHostPath.includes(',')) {
-    throw new Error('Shared folder paths cannot contain commas on the current SMB path.');
-  }
-
-  if (host.platform === 'win32') {
-    return [`smb=${resolvedHostPath.replace(/\\/g, '/')}`];
-  }
-
-  return [`smb=${resolvedHostPath}`];
-}
-
 function resolveQemuShareDir(binaryPath) {
   const candidates = [
     path.resolve(path.dirname(binaryPath), '../share/qemu'),
@@ -389,7 +351,7 @@ class QemuCommandBuilder {
       const netdevParts =
         machine.network.mode === 'bridge'
           ? ['bridge,id=net0']
-          : ['user,id=net0', ...buildSharedFolderArgs(machine, environment, host)];
+          : ['user,id=net0'];
       const netdev = netdevParts.join(',');
       args.push('-netdev', netdev, '-device', `${machine.network.card},netdev=net0`);
     }

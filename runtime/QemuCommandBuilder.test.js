@@ -245,64 +245,6 @@ describe('QemuCommandBuilder machine types', () => {
     expect(result.args).toContain('pc');
   });
 
-  it('adds SMB sharing to user networking when a shared folder is enabled', () => {
-    const builder = new QemuCommandBuilder();
-    const shareDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sanaka-share-'));
-    const result = builder.build({
-      machine: {
-        title: 'Shared Folder Test',
-        system: {
-          arch: 'x86_64',
-          machine_type: 'pc-q35-9.2',
-          accelerator: 'tcg',
-          boot_order: 'disk',
-          memory_mib: 1024,
-          cpu_cores: 1,
-          sound_card: 'intel-hda',
-          uefi: false
-        },
-        media: { iso: '', floppy: '' },
-        disks: [],
-        network: { enabled: true, mode: 'user', card: 'rtl8139' },
-        sharing: { enabled: true, hostPath: shareDir, mode: 'readwrite', shareName: 'qemu' },
-        display: { frontend: 'sanaka', gpu: 'std', sanaka: { backend: 'vnc', scale_mode: 'fit', clipboard: true } },
-        peripherals: { usb_tablet: true },
-        advanced: { audio_backend: 'auto', qemu_args: '' }
-      },
-      environment: {
-        binaries: {
-          x86_64: { found: true, path: '/usr/bin/qemu-system-x86_64', version: 'QEMU emulator version 11.0.1' }
-        },
-        sharedFolders: {
-          smb: {
-            available: true,
-            backend: 'smb',
-            smbdPath: '/usr/sbin/smbd',
-            installHint: ''
-          }
-        },
-        accelerators: ['tcg']
-      },
-      runtimePaths: {
-        qmp: { transport: 'tcp', host: '127.0.0.1', port: 47001 }
-      },
-      displayConfig: {
-        port: 5901,
-        websocketPort: 5701,
-        displayNumber: 1
-      },
-      host: {
-        platform: 'darwin',
-        arch: 'arm64'
-      }
-    });
-
-    const netdevIndex = result.args.findIndex((value) => value === '-netdev');
-    expect(netdevIndex).toBeGreaterThan(-1);
-    expect(result.args[netdevIndex + 1]).toContain('user,id=net0');
-    expect(result.args[netdevIndex + 1]).toContain(`smb=${shareDir}`);
-  });
-
   it('maps sata disks through an AHCI controller', () => {
     const builder = new QemuCommandBuilder();
     const result = builder.build({

@@ -786,19 +786,13 @@ const ipcHandlers = {
   async listRunningMachines() {
     return getRuntimeManager().listRunningMachines();
   },
-  async updateSharedFolder(_event, machinePath, config) {
-    const { bundlePath, configPath } = normalizeBundlePathForUpdate(machinePath);
-    const content = await fs.readFile(configPath, 'utf8');
-    const machine = parseToml(content);
-    if (machine.kind !== 'machine') {
-      throw new Error('The selected configuration is not a machine package.');
-    }
-
-    machine.sharing = normalizeSharedFolderConfig(config || {});
-    await fs.writeFile(configPath, stringifyToml(machine), 'utf8');
-
-    const result = await getRuntimeManager().updateSharedFolder(bundlePath, machine.sharing);
-    return result;
+  async updateSharedFolder() {
+    return {
+      ok: false,
+      error: 'Shared folders are unavailable in this version.',
+      pendingRestart: false,
+      state: null
+    };
   },
   async exportMachine(_event, options) {
     return getExportService().exportMachine(options || {});

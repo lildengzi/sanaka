@@ -12,24 +12,6 @@ const { QemuCommandBuilder } = require('./QemuCommandBuilder');
 const MACHINE_CONFIG_FILE = 'machine.svm';
 const STOP_GRACE_TIMEOUT_MS = 8000;
 
-function normalizeSharedFolderConfig(config = {}) {
-  return {
-    enabled: Boolean(config.enabled),
-    hostPath: String(config.hostPath || ''),
-    mode: config.mode === 'readonly' ? 'readonly' : 'readwrite',
-    shareName: 'qemu'
-  };
-}
-
-function sharedFolderConfigEquals(left, right) {
-  const a = normalizeSharedFolderConfig(left);
-  const b = normalizeSharedFolderConfig(right);
-  return a.enabled === b.enabled
-    && a.hostPath === b.hostPath
-    && a.mode === b.mode
-    && a.shareName === b.shareName;
-}
-
 function machineStatusToLifecycle(status) {
   if (status === 'starting' || status === 'stopping' || status === 'resetting' || status === 'paused') {
     return status;
@@ -84,7 +66,12 @@ function parseMachineConfig(content) {
   }
   return {
     ...parsed,
-    sharing: normalizeSharedFolderConfig(parsed.sharing || {})
+    sharing: {
+      enabled: false,
+      hostPath: '',
+      mode: 'readwrite',
+      shareName: 'qemu'
+    }
   };
 }
 
@@ -224,14 +211,14 @@ class RuntimeManager {
   }
 
   async getSharedFolderEnvironment() {
-    const environment = await this.getRuntimeEnvironment();
-    return environment.sharedFolders?.smb || {
+    await this.getRuntimeEnvironment();
+    return {
       available: false,
       backend: 'smb',
       smbdPath: null,
       version: null,
-      installHint: 'Shared folders are unavailable.',
-      reason: 'Missing shared folder environment.'
+      installHint: 'Shared folders are unavailable in this version.',
+      reason: 'Shared folders are unavailable in this version.'
     };
   }
 
@@ -299,28 +286,9 @@ class RuntimeManager {
   }
 
   async updateSharedFolder(machinePath, config) {
-    const { bundlePath, configPath } = normalizeBundlePath(machinePath);
-    const content = await fsPromises.readFile(configPath, 'utf8');
-    const machine = parseMachineConfig(content);
-    const nextConfig = normalizeSharedFolderConfig(config);
-
-    const activeRecord = this.registry.get(machine.id);
-    if (activeRecord) {
-      activeRecord.pendingSharedFolderConfig = sharedFolderConfigEquals(activeRecord.machine?.sharing, nextConfig)
-        ? null
-        : nextConfig;
-      this.registry.set(activeRecord);
-      return {
-        ok: true,
-        config: nextConfig,
-        pendingRestart: Boolean(activeRecord.pendingSharedFolderConfig),
-        state: this.#serializeState(activeRecord)
-      };
-    }
-
     return {
-      ok: true,
-      config: nextConfig,
+      ok: false,
+      error: 'Shared folders are unavailable in this version.',
       pendingRestart: false,
       state: null
     };
@@ -395,7 +363,7 @@ class RuntimeManager {
 
     const child = spawn(buildResult.binaryPath, buildResult.args, {
       cwd: bundlePath,
-      env: this.#buildChildEnv(environment)
+      env: { ...process.env }
     });
 
     const logStream = fs.createWriteStream(logPath, { flags: 'a' });
@@ -436,7 +404,6 @@ class RuntimeManager {
       process: child,
       qmpClient: null,
       machine,
-      pendingSharedFolderConfig: null,
       logStream
     });
 
@@ -786,8 +753,6 @@ class RuntimeManager {
       return null;
     }
 
-    const sharedFolder = this.#serializeSharedFolder(record);
-
     return {
       machineId: record.machineId,
       bundlePath: record.bundlePath,
@@ -804,56 +769,8 @@ class RuntimeManager {
       qmpTcpPort: record.qmpTcpPort,
       logPath: record.logPath,
       exitCode: record.exitCode,
-      lastError: record.lastError,
-      ...(sharedFolder ? { sharedFolder } : {})
+      lastError: record.lastError
     };
-  }
-
-  #serializeSharedFolder(record) {
-    const configured = record.pendingSharedFolderConfig || record.machine?.sharing || null;
-    if (!configured) {
-      return undefined;
-    }
-
-    const enabled = Boolean(configured.enabled && configured.hostPath);
-    const pendingRestart = Boolean(record.pendingSharedFolderConfig);
-    const active = enabled && !pendingRestart && record.status !== 'stopped' && record.machine?.sharing?.enabled;
-
-    return {
-      enabled,
-      active,
-      backend: 'smb',
-      hostPath: configured.hostPath || '',
-      guestAddress: enabled ? '10.0.2.4' : undefined,
-      guestPath: enabled ? 'qemu' : undefined,
-      guestUrl: enabled ? 'smb://10.0.2.4/qemu' : undefined,
-      mode: configured.mode || 'readwrite',
-      pendingRestart,
-      warning:
-        configured.mode === 'readonly'
-          ? 'Read-only shared folders are not supported yet on the current SMB path.'
-          : null,
-      installHint:
-        enabled
-          ? 'Older Windows guests may require adding "10.0.2.4 smbserver" to LMHOSTS, then opening \\\\smbserver\\\\qemu.'
-          : null
-    };
-  }
-
-  #buildChildEnv(environment) {
-    const env = { ...process.env };
-    const smbdPath = environment?.sharedFolders?.smb?.smbdPath;
-    if (!smbdPath) {
-      return env;
-    }
-
-    const helperDir = path.dirname(smbdPath);
-    const currentPath = String(env.PATH || '');
-    const pathEntries = currentPath.split(path.delimiter).filter(Boolean);
-    if (!pathEntries.includes(helperDir)) {
-      env.PATH = [helperDir, ...pathEntries].join(path.delimiter);
-    }
-    return env;
   }
 
   async #resolveMediaDeviceIds(record, drive) {

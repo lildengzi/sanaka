@@ -234,6 +234,32 @@ async function readTemplateByKey(settings: AppSettings, templateKey: string) {
   return parsed.kind === 'template' ? parsed : null;
 }
 
+async function sanitizeImportedTemplateDocument(template: SakaTemplate) {
+  const nextTemplate: SakaTemplate = structuredClone(template);
+
+  const [isoExists, floppyExists] = await Promise.all([
+    nextTemplate.media?.iso ? window.electronAPI.files.pathExists(nextTemplate.media.iso) : Promise.resolve(false),
+    nextTemplate.media?.floppy ? window.electronAPI.files.pathExists(nextTemplate.media.floppy) : Promise.resolve(false)
+  ]);
+
+  if (nextTemplate.media?.iso && !isoExists) {
+    nextTemplate.media.iso = '';
+  }
+
+  if (nextTemplate.media?.floppy && !floppyExists) {
+    nextTemplate.media.floppy = '';
+  }
+
+  nextTemplate.sharing = {
+    enabled: false,
+    hostPath: '',
+    mode: 'readwrite',
+    shareName: 'qemu'
+  };
+
+  return nextTemplate;
+}
+
 export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
@@ -429,7 +455,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
 
   const createDraftFromTemplateKey = useCallback(async (templateKey: string) => {
     const template = await readTemplateByKey(settings, templateKey);
-    const machine = template ? createMachineFromTemplateDocument(template) : createMachineFromTemplate(templateKey);
+    const normalizedTemplate = template ? await sanitizeImportedTemplateDocument(template) : null;
+    const machine = normalizedTemplate ? createMachineFromTemplateDocument(normalizedTemplate) : createMachineFromTemplate(templateKey);
     const existingTitles = recents.map((r) => r.title);
     machine.title = getDefaultNewMachineTitle(existingTitles);
     setDraft({ machine, dirty: true });
@@ -446,7 +473,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     async (templateKey: string) => {
       const template = await readTemplateByKey(settings, templateKey);
       if (!template || !draft) return;
-      const nextMachine = createMachineFromTemplateDocument(template);
+      const nextMachine = createMachineFromTemplateDocument(await sanitizeImportedTemplateDocument(template));
       nextMachine.title = draft.machine.title || nextMachine.title;
       nextMachine.meta.notes = draft.machine.meta.notes;
       setDraft({ ...draft, machine: nextMachine, dirty: true });
@@ -568,7 +595,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
           };
           await persistSettings(nextSettings);
         }
-        const machine = createMachineFromTemplateDocument(parsed);
+        const machine = createMachineFromTemplateDocument(await sanitizeImportedTemplateDocument(parsed));
         const existingTitles = recents.map((r) => r.title);
         machine.title = getDefaultNewMachineTitle(existingTitles);
         setDraft({ machine, dirty: true });
