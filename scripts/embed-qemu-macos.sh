@@ -1,8 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+source "$(cd "$(dirname "$0")" && pwd)/lib/i18n.sh"
+sanaka_load_i18n
+
 if [[ $# -lt 2 ]]; then
-  echo "Usage: $0 <qemu-build-dir> <Sanaka.app> [--sign]" >&2
+  sanaka_printf_ln "common.usage_embed_macos" "$0" >&2
   exit 1
 fi
 
@@ -15,7 +18,7 @@ if [[ "${3:-}" == "--sign" ]]; then
 fi
 
 if [[ ! -d "$APP_PATH" ]]; then
-  echo "App bundle not found: $APP_PATH" >&2
+  sanaka_printf_ln "embed_macos.app_not_found" "$APP_PATH" >&2
   exit 1
 fi
 
@@ -69,7 +72,7 @@ for arch in "${SYSTEM_TARGETS[@]}"; do
   elif [[ -f "$BUILD_DIR/qemu-system-$arch" ]]; then
     copy_binary "$BUILD_DIR/qemu-system-$arch" "qemu-system-$arch"
   else
-    echo "Missing QEMU system binary for $arch in $BUILD_DIR" >&2
+    sanaka_printf_ln "embed_macos.missing_system_binary" "$arch" "$BUILD_DIR" >&2
     exit 1
   fi
 done
@@ -164,7 +167,7 @@ PY
   fi
 
   if [[ ! -f "$real_dep" ]]; then
-    echo "Dependency not found: $real_dep" >&2
+    sanaka_printf_ln "embed_macos.dependency_not_found" "$real_dep" >&2
     return 1
   fi
 
@@ -241,7 +244,7 @@ if [[ "$DO_SIGN" == "true" ]]; then
 fi
 
 echo
-echo "Embedded QEMU into: $APP_PATH"
-echo "QEMU binaries: $QEMU_BIN_DIR"
-echo "Frameworks: $FRAMEWORKS_DIR"
-echo "Shared resources: $QEMU_SHARE_DIR"
+sanaka_log "embed_macos.embedded_into" "$APP_PATH"
+sanaka_log "embed_macos.qemu_binaries" "$QEMU_BIN_DIR"
+sanaka_log "embed_macos.frameworks" "$FRAMEWORKS_DIR"
+sanaka_log "embed_macos.shared_resources" "$QEMU_SHARE_DIR"

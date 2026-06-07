@@ -1,8 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+source "$(cd "$(dirname "$0")" && pwd)/lib/i18n.sh"
+sanaka_load_i18n
+
 if [[ "${1:-}" == "" ]]; then
-  echo "Usage: $0 <qemu-source-dir> [build-dir-name]" >&2
+  sanaka_printf_ln "common.usage_build_qemu" "$0" >&2
   exit 1
 fi
 
@@ -41,6 +44,6 @@ cd "$BUILD_DIR"
 make -j"$(sysctl -n hw.logicalcpu)"
 
 echo
-echo "Built QEMU in: $BUILD_DIR"
-echo "Key binaries:"
+sanaka_log "build_qemu.built_in" "$BUILD_DIR"
+sanaka_log "build_qemu.key_binaries"
 find "$BUILD_DIR" -maxdepth 1 \( -name 'qemu-system-*-unsigned' -o -name 'qemu-img' \) | sort

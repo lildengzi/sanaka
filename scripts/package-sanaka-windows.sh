@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(cd "$(dirname "$0")" && pwd)/lib/i18n.sh"
+sanaka_load_i18n
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUTPUT_ROOT="$REPO_ROOT/release"
 
@@ -32,8 +35,8 @@ resolve_qemu_dir() {
 QEMU_DIR="$(resolve_qemu_dir "${1:-}" || true)"
 
 if [[ -z "$QEMU_DIR" ]]; then
-  echo "QEMU directory not found automatically." >&2
-  echo "Usage: $0 <qemu-install-dir>" >&2
+  sanaka_log "package_windows.qemu_not_found" >&2
+  sanaka_printf_ln "common.usage_package_windows" "$0" >&2
   exit 1
 fi
 
@@ -45,12 +48,12 @@ npx electron-builder --dir --win
 APP_DIR="$(find "$OUTPUT_ROOT" -maxdepth 2 -type d -name 'win-unpacked' | head -n 1)"
 
 if [[ "$APP_DIR" == "" ]]; then
-  echo "Unable to locate win-unpacked under $OUTPUT_ROOT" >&2
+  sanaka_printf_ln "package_windows.app_not_found" "$OUTPUT_ROOT" >&2
   exit 1
 fi
 
 bash "$REPO_ROOT/scripts/embed-qemu-windows.sh" "$QEMU_DIR" "$APP_DIR"
 
 echo
-echo "Packaged Windows app with embedded QEMU:"
+sanaka_log "package_windows.packaged_app"
 echo "$APP_DIR"

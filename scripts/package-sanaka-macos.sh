@@ -1,8 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+source "$(cd "$(dirname "$0")" && pwd)/lib/i18n.sh"
+sanaka_load_i18n
+
 if [[ "${1:-}" == "" ]]; then
-  echo "Usage: $0 <qemu-build-dir>" >&2
+  sanaka_printf_ln "common.usage_package_macos" "$0" >&2
   exit 1
 fi
 
@@ -18,7 +21,7 @@ npx electron-builder --dir --mac --config.mac.target=dir
 APP_PATH="$(find "$OUTPUT_ROOT" -type d -name 'Sanaka.app' | head -n 1)"
 
 if [[ "$APP_PATH" == "" ]]; then
-  echo "Unable to locate packaged Sanaka.app under $OUTPUT_ROOT" >&2
+  sanaka_printf_ln "package_macos.app_not_found" "$OUTPUT_ROOT" >&2
   exit 1
 fi
 
@@ -34,5 +37,5 @@ fi
 touch "$APP_PATH" || true
 
 echo
-echo "Packaged app with embedded QEMU:"
+sanaka_log "package_macos.packaged_app"
 echo "$APP_PATH"

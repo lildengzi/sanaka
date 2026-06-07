@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(cd "$(dirname "$0")" && pwd)/lib/i18n.sh"
+sanaka_load_i18n
+
 if [[ $# -lt 2 ]]; then
-  echo "Usage: $0 <qemu-install-dir> <Sanaka-win-unpacked-dir>" >&2
+  sanaka_printf_ln "common.usage_embed_windows" "$0" >&2
   exit 1
 fi
 
@@ -10,12 +13,12 @@ QEMU_DIR="$1"
 APP_DIR="$2"
 
 if [[ ! -d "$QEMU_DIR" ]]; then
-  echo "QEMU directory not found: $QEMU_DIR" >&2
+  sanaka_printf_ln "embed_windows.qemu_dir_not_found" "$QEMU_DIR" >&2
   exit 1
 fi
 
 if [[ ! -d "$APP_DIR" ]]; then
-  echo "Sanaka unpacked app directory not found: $APP_DIR" >&2
+  sanaka_printf_ln "embed_windows.app_dir_not_found" "$APP_DIR" >&2
   exit 1
 fi
 
@@ -59,7 +62,7 @@ OPTIONAL_SKIP=(
 
 for binary in "${SYSTEM_TARGETS[@]}"; do
   if [[ ! -f "$QEMU_DIR/$binary" ]]; then
-    echo "Missing required QEMU binary: $QEMU_DIR/$binary" >&2
+    sanaka_printf_ln "embed_windows.missing_required_binary" "$QEMU_DIR/$binary" >&2
     exit 1
   fi
   cp -f "$QEMU_DIR/$binary" "$TARGET_QEMU_DIR/$binary"
@@ -84,6 +87,6 @@ rm -rf "$TARGET_QEMU_DIR/share/doc" \
   "$TARGET_QEMU_DIR/share/applications"
 
 echo
-echo "Embedded Windows QEMU into: $APP_DIR"
-echo "QEMU source: $QEMU_DIR"
-echo "QEMU target: $TARGET_QEMU_DIR"
+sanaka_log "embed_windows.embedded_into" "$APP_DIR"
+sanaka_log "embed_windows.qemu_source" "$QEMU_DIR"
+sanaka_log "embed_windows.qemu_target" "$TARGET_QEMU_DIR"

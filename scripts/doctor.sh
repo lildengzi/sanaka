@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+source "$(cd "$(dirname "$0")" && pwd)/lib/i18n.sh"
+sanaka_load_i18n
+
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
@@ -126,11 +129,11 @@ write_user_npmrc_key() {
 
 print_current_config() {
   read_current_config
-  section "当前镜像配置"
-  log "npm registry: ${NPM_REGISTRY:-<未设置>}"
-  log "electron mirror: ${ELECTRON_MIRROR_URL:-<未设置>}"
+  sanaka_section "doctor.current_mirror_config"
+  sanaka_log "doctor.registry_value" "${NPM_REGISTRY:-$(sanaka_t "doctor.unset")}"
+  sanaka_log "doctor.electron_mirror_value" "${ELECTRON_MIRROR_URL:-$(sanaka_t "doctor.unset")}"
   if [[ -n "$CURRENT_ELECTRON_VERSION" ]]; then
-    log "electron version: $CURRENT_ELECTRON_VERSION"
+    sanaka_log "doctor.electron_version_value" "$CURRENT_ELECTRON_VERSION"
   fi
 }
 
@@ -194,19 +197,19 @@ pick_fastest_mirror() {
 
   for url in "${candidates[@]}"; do
     label="$url"
-    printf '测速中: %s ... ' "$label" >&2
+    sanaka_printf "doctor.testing_one" "$label" >&2
     if [[ "$mode" == "npm" ]]; then
       if seconds="$(probe_npm_registry "$url")"; then
         printf '%ss\n' "$seconds" >&2
       else
-        printf '失败\n' >&2
+        sanaka_printf_ln "doctor.testing_failed" >&2
         continue
       fi
     else
       if seconds="$(probe_electron_mirror "$url")"; then
         printf '%ss\n' "$seconds" >&2
       else
-        printf '失败\n' >&2
+        sanaka_printf_ln "doctor.testing_failed" >&2
         continue
       fi
     fi
@@ -226,18 +229,18 @@ apply_mirrors() {
   local npm_registry="$1"
   local electron_mirror="$2"
 
-  section "写入镜像配置"
+  sanaka_section "doctor.writing_mirrors"
   npm config set registry "$(trim_trailing_slash "$npm_registry")"
   write_user_npmrc_key "electron_mirror" "$(normalize_with_trailing_slash "$electron_mirror")"
   export ELECTRON_MIRROR="$(normalize_with_trailing_slash "$electron_mirror")"
-  log "已设置 npm registry: $(trim_trailing_slash "$npm_registry")"
-  log "已设置 electron mirror: $(normalize_with_trailing_slash "$electron_mirror")"
+  sanaka_log "doctor.set_npm_registry" "$(trim_trailing_slash "$npm_registry")"
+  sanaka_log "doctor.set_electron_mirror" "$(normalize_with_trailing_slash "$electron_mirror")"
 }
 
 confirm() {
   local prompt="$1"
   local answer
-  printf '%s [Y/n] ' "$prompt"
+  sanaka_printf "common.yes_no" "$prompt"
   read -r answer || true
   case "${answer:-Y}" in
     Y|y|yes|YES|"")
@@ -253,74 +256,74 @@ test_and_offer_best_mirrors() {
   local npm_result electron_result
   local best_npm best_npm_time best_electron best_electron_time
 
-  section "测速 npm 镜像"
+  sanaka_section "doctor.testing_npm"
   npm_result="$(pick_fastest_mirror "npm" "${NPM_CANDIDATES[@]}" || true)"
   if [[ -z "$npm_result" ]]; then
-    log "没有测到可用的 npm registry。"
+    sanaka_log "doctor.no_npm_registry"
     return 1
   fi
   best_npm="${npm_result%%|*}"
   best_npm_time="${npm_result#*|}"
 
-  section "测速 Electron 镜像"
+  sanaka_section "doctor.testing_electron"
   electron_result="$(pick_fastest_mirror "electron" "${ELECTRON_CANDIDATES[@]}" || true)"
   if [[ -z "$electron_result" ]]; then
-    log "没有测到可用的 Electron 镜像。"
+    sanaka_log "doctor.no_electron_mirror"
     return 1
   fi
   best_electron="${electron_result%%|*}"
   best_electron_time="${electron_result#*|}"
 
-  section "测速结果"
-  log "最快 npm registry: $best_npm (${best_npm_time}s)"
-  log "最快 Electron mirror: $best_electron (${best_electron_time}s)"
+  sanaka_section "doctor.testing_result"
+  sanaka_log "doctor.fastest_npm" "$best_npm" "$best_npm_time"
+  sanaka_log "doctor.fastest_electron" "$best_electron" "$best_electron_time"
 
   if [[ "$AUTO_MODE" == "true" ]]; then
     apply_mirrors "$best_npm" "$best_electron"
     return 0
   fi
 
-  if confirm "是否切换到这组镜像？"; then
+  if confirm "$(sanaka_t "doctor.switch_prompt")"; then
     apply_mirrors "$best_npm" "$best_electron"
   else
-    log "已取消写入镜像配置。"
+    sanaka_log "doctor.switch_cancelled"
   fi
 }
 
 repair_electron_cache() {
-  log "清理 Electron 相关缓存..."
+  sanaka_log "doctor.clean_electron_cache"
   rm -rf node_modules/electron node_modules/@electron node_modules/fs-extra
   rm -rf "$HOME/.cache/electron" "$HOME/.npm/_electron"
 }
 
 repair_full_node_modules() {
-  log "整包清理 node_modules..."
+  sanaka_log "doctor.clean_node_modules"
   rm -rf node_modules
 }
 
 verify_npm_cache() {
-  log "检查 npm 缓存..."
+  sanaka_log "doctor.verify_npm_cache"
   if npm cache verify >/dev/null 2>&1; then
     return 0
   fi
 
-  log "npm 缓存校验失败，强制清理..."
+  sanaka_log "doctor.verify_npm_cache_failed"
   npm cache clean --force >/dev/null 2>&1 || true
 }
 
 install_dependencies() {
-  log "安装/修复依赖..."
+  sanaka_log "doctor.install_dependencies"
   if npm install; then
     return 0
   fi
 
-  log "首次 npm install 失败，尝试修复 Electron 相关依赖后重试..."
+  sanaka_log "doctor.install_retry_electron"
   repair_electron_cache
   if npm install; then
     return 0
   fi
 
-  log "第二次 npm install 仍失败，清空 node_modules 后最后重试一次..."
+  sanaka_log "doctor.install_retry_full"
   repair_full_node_modules
   npm install
 }
@@ -330,42 +333,39 @@ run_repair_flow() {
   install_dependencies
 
   if [[ "$SKIP_BUILD" != "true" ]]; then
-    section "构建检查"
+    sanaka_section "doctor.build_check"
     npm run build
   fi
 }
 
 print_menu() {
-  cat <<'EOF'
-
-Sanaka Doctor
-1. 一键检查、修复并构建
-2. 只检查并修复依赖
-3. 测试镜像速度并切换
-4. 查看当前镜像配置
-5. 退出
-
-EOF
+  printf '\n%s\n' "$(sanaka_t "doctor.title")"
+  sanaka_printf_ln "doctor.menu_1"
+  sanaka_printf_ln "doctor.menu_2"
+  sanaka_printf_ln "doctor.menu_3"
+  sanaka_printf_ln "doctor.menu_4"
+  sanaka_printf_ln "doctor.menu_5"
+  printf '\n'
 }
 
 run_menu() {
   local choice
   while true; do
     print_menu
-    printf '请选择 [1-5]: '
+    sanaka_printf "common.select_1_5"
     read -r choice || exit 0
     case "$choice" in
       1)
         test_and_offer_best_mirrors || true
         run_repair_flow
-        log "doctor 完成。"
+        sanaka_log "doctor.completed"
         return 0
         ;;
       2)
         test_and_offer_best_mirrors || true
         SKIP_BUILD="true"
         run_repair_flow
-        log "依赖修复完成。"
+        sanaka_log "doctor.deps_completed"
         return 0
         ;;
       3)
@@ -375,30 +375,30 @@ run_menu() {
         print_current_config
         ;;
       5)
-        log "已退出。"
+        sanaka_log "common.exit"
         return 0
         ;;
       *)
-        log "请输入 1 到 5。"
+        sanaka_log "common.invalid_1_5"
         ;;
     esac
   done
 }
 
 main() {
-  log "当前目录: $ROOT_DIR"
+  sanaka_log "common.current_directory" "$ROOT_DIR"
 
-  require_command git "没找到 git。请先安装 Git。"
-  require_command node "没找到 node。请先安装 Node.js。"
-  require_command npm "没找到 npm。请先安装 Node.js。"
-  require_command curl "没找到 curl。请先安装 curl。"
+  require_command git "$(sanaka_t "doctor.missing_git")"
+  require_command node "$(sanaka_t "doctor.missing_node")"
+  require_command npm "$(sanaka_t "doctor.missing_npm")"
+  require_command curl "$(sanaka_t "doctor.missing_curl")"
 
   load_electron_version
 
   if [[ "$AUTO_MODE" == "true" ]]; then
     test_and_offer_best_mirrors || true
     run_repair_flow
-    log "doctor 完成。"
+    sanaka_log "doctor.completed"
     return 0
   fi
 
@@ -408,7 +408,7 @@ main() {
   fi
 
   run_repair_flow
-  log "doctor 完成。"
+  sanaka_log "doctor.completed"
 }
 
 main "$@"

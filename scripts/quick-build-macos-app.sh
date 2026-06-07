@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+source "$(cd "$(dirname "$0")" && pwd)/lib/i18n.sh"
+sanaka_load_i18n
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEFAULT_QEMU_BUILD_DIR="/Volumes/sks/src/qemu-11.0.1/build-sanaka"
 QEMU_BUILD_DIR="${1:-$DEFAULT_QEMU_BUILD_DIR}"
@@ -9,15 +12,15 @@ DMG_BACKGROUND="$REPO_ROOT/build/dmg.png"
 CREATE_DMG_BIN="${CREATE_DMG_BIN:-/opt/homebrew/opt/create-dmg/bin/create-dmg}"
 
 if [[ ! -d "$QEMU_BUILD_DIR" ]]; then
-  echo "QEMU build directory not found:" >&2
+  sanaka_log "quick_build.qemu_dir_not_found" >&2
   echo "  $QEMU_BUILD_DIR" >&2
   echo >&2
-  echo "Usage:" >&2
-  echo "  sh scripts/quick-build-macos-app.sh [qemu-build-dir]" >&2
+  sanaka_log "quick_build.usage_header" >&2
+  sanaka_log "quick_build.usage_line" >&2
   exit 1
 fi
 
-echo "Using QEMU build directory:"
+sanaka_log "quick_build.using_qemu_dir"
 echo "  $QEMU_BUILD_DIR"
 echo
 
@@ -27,23 +30,23 @@ bash "$REPO_ROOT/scripts/package-sanaka-macos.sh" "$QEMU_BUILD_DIR"
 APP_PATH="$(find "$OUTPUT_ROOT" -type d -name 'Sanaka.app' | head -n 1)"
 
 if [[ "$APP_PATH" == "" ]]; then
-  echo "Unable to locate packaged Sanaka.app under $OUTPUT_ROOT" >&2
+  sanaka_printf_ln "quick_build.app_not_found" "$OUTPUT_ROOT" >&2
   exit 1
 fi
 
 if [[ ! -f "$DMG_BACKGROUND" ]]; then
-  echo "DMG background not found: $DMG_BACKGROUND" >&2
+  sanaka_printf_ln "quick_build.dmg_background_not_found" "$DMG_BACKGROUND" >&2
   exit 1
 fi
 
 FINAL_DMG_PATH="$OUTPUT_ROOT/Sanaka.dmg"
 
 if [[ ! -x "$CREATE_DMG_BIN" ]]; then
-  echo "create-dmg not found:" >&2
+  sanaka_log "quick_build.create_dmg_not_found" >&2
   echo "  $CREATE_DMG_BIN" >&2
   echo >&2
-  echo "Install it with:" >&2
-  echo "  brew install create-dmg" >&2
+  sanaka_log "quick_build.install_with" >&2
+  sanaka_log "quick_build.install_with_line" >&2
   exit 1
 fi
 
@@ -60,8 +63,8 @@ rm -f "$FINAL_DMG_PATH"
   "$(dirname "$APP_PATH")"
 
 echo
-echo "Packaged app:"
+sanaka_log "quick_build.packaged_app"
 echo "$APP_PATH"
 echo
-echo "Packaged dmg:"
+sanaka_log "quick_build.packaged_dmg"
 echo "$FINAL_DMG_PATH"
