@@ -167,24 +167,24 @@ ask_qemu_dir() {
   fi
 
   while true; do
-    pause_line
-    sanaka_log "start.qemu_dir_question"
+    pause_line >&2
+    sanaka_log "start.qemu_dir_question" >&2
     if [[ -n "$default_qemu_dir" ]]; then
-      sanaka_log "start.qemu_dir_default" "$default_qemu_dir"
+      sanaka_log "start.qemu_dir_default" "$default_qemu_dir" >&2
     fi
-    sanaka_printf "start.qemu_dir_prompt"
+    sanaka_printf "start.qemu_dir_prompt" >&2
     read -r entered || true
     if [[ -z "$entered" ]]; then
       entered="$default_qemu_dir"
     fi
 
     if [[ -z "$entered" ]]; then
-      sanaka_log "start.qemu_dir_missing"
+      sanaka_log "start.qemu_dir_missing" >&2
       continue
     fi
 
     if [[ ! -d "$entered" ]]; then
-      sanaka_log "start.qemu_dir_not_found" "$entered"
+      sanaka_log "start.qemu_dir_not_found" "$entered" >&2
       continue
     fi
 
