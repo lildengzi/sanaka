@@ -17,22 +17,11 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "设置 npm / Electron 镜像..."
-npm config set registry https://registry.npmmirror.com
-export ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-
 echo "拉取远程最新代码..."
 git fetch origin
 git reset --hard origin/main
 
-echo "安装/修复依赖..."
-if ! npm install; then
-  echo "首次 npm install 失败，清理 node_modules 后重试一次..."
-  rm -rf node_modules
-  npm install
-fi
-
-echo "构建检查..."
-npm run build
+echo "进入 doctor 自动检查与修复..."
+sh "$ROOT_DIR/scripts/doctor.sh" --auto
 
 echo "完成。现在可以运行: npm start"
