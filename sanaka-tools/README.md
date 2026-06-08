@@ -14,7 +14,7 @@
 - `src/`
   - 原生 Win32 客户端源码
 - `scripts/`
-  - 构建脚本
+  - 仅保留一个 Windows PowerShell 构建入口
 - `installer/`
   - NSIS 安装器脚本
 - `dist/`
@@ -24,46 +24,24 @@
 
 - 已建立 XP/Win32 客户端源码骨架
 - 已接入 Sanaka 工具盘生成逻辑
-- 已提供 macOS 交叉构建脚本
-- 已提供 Windows MinGW32 构建脚本
+- 已收口为单一 PowerShell 构建入口
 - 已提供 NSIS 安装器脚本
-- 当前环境还未安装 `makensis`，所以未在本机生成 `setup.exe`
+- Windows 侧可自动搜索整机的 `MinGW32` 和 `NSIS`
 
 ## 本地构建
 
-在 macOS / Linux 上，如果已安装 `mingw-w64`：
+在 Windows PowerShell 中运行：
 
-```sh
-sh sanaka-tools/scripts/build-win32.sh
+```powershell
+powershell -ExecutionPolicy Bypass -File .\sanaka-tools\scripts\build-installer-xp.ps1
 ```
 
-默认输出：
+脚本会：
 
-```text
-sanaka-tools/dist/sanaka_clipboard.exe
-```
-
-注意：
-
-- 当前 macOS Homebrew 的 `mingw-w64` 产物会依赖 `api-ms-win-crt-*`
-- 这对 `Windows XP` 不合适
-- 因此它更适合做快速验证，不适合作为 XP 正式发布构建
-
-## Windows XP 正式构建
-
-如果你的 Windows 机器上有较老的 `MinGW32`：
-
-```bat
-sanaka-tools\scripts\build-win32-xp.bat
-```
-
-如果同时装了 `NSIS`：
-
-```bat
-sanaka-tools\scripts\build-installer-xp.bat
-```
-
-这样更适合产出面向 `XP -> Win11+` 的正式版本。
+- 自动搜索整台电脑上的 `MinGW32 gcc`
+- 自动搜索整台电脑上的 `makensis.exe`
+- 编译 `sanaka_clipboard.exe`
+- 生成 `setup.exe`
 
 ## 安装器
 

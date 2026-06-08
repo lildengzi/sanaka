@@ -9,6 +9,9 @@ class SanakaToolsService {
   }
 
   async ensureBundledIso() {
+    const userDataPath = typeof this.app?.getPath === 'function' ? this.app.getPath('userData') : process.cwd();
+    const runtimeDir = path.join(userDataPath, 'generated-tools-iso');
+    const isoPath = path.join(runtimeDir, 'sanaka-tools.iso');
     const candidates = [];
     if (typeof this.app?.getAppPath === 'function') {
       candidates.push(path.join(this.app.getAppPath(), 'sanaka-tools.iso'));
@@ -18,6 +21,9 @@ class SanakaToolsService {
     }
 
     for (const candidate of candidates) {
+      if (path.resolve(candidate) === path.resolve(path.join(process.cwd(), 'sanaka-tools.iso'))) {
+        continue;
+      }
       try {
         await this.fs.access(candidate);
         return candidate;
@@ -25,17 +31,10 @@ class SanakaToolsService {
         // ignore
       }
     }
-
-    const userDataPath = typeof this.app?.getPath === 'function' ? this.app.getPath('userData') : process.cwd();
-    const runtimeDir = path.join(userDataPath, 'generated-tools-iso');
-    const isoPath = path.join(runtimeDir, 'sanaka-tools.iso');
     await this.fs.mkdir(runtimeDir, { recursive: true });
 
-    try {
-      await this.fs.access(isoPath);
+    if (await this.#isGeneratedIsoFresh(isoPath)) {
       return isoPath;
-    } catch {
-      // continue
     }
 
     const workspace = await this.isoService.createTemporaryWorkspace('sanaka-tools-src-');
@@ -96,6 +95,38 @@ class SanakaToolsService {
       if (fallbackContent !== null) {
         await this.fs.writeFile(destinationPath, fallbackContent, 'utf8');
       }
+    }
+  }
+
+  async #isGeneratedIsoFresh(isoPath) {
+    const isoStat = await this.#safeStat(isoPath);
+    if (!isoStat) {
+      return false;
+    }
+
+    const sourcePaths = [
+      'sanaka-tools/dist/setup.exe',
+      'sanaka-tools/dist/sanaka_clipboard.exe',
+      'sanaka-tools/config/sanaka-clipboard.ini',
+      'sanaka-tools/installer/sanaka-tools.nsi',
+      'sanaka-tools/README.md'
+    ];
+
+    for (const relativePath of sourcePaths) {
+      const stat = await this.#safeStat(path.join(process.cwd(), relativePath));
+      if (stat && stat.mtimeMs > isoStat.mtimeMs) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  async #safeStat(targetPath) {
+    try {
+      return await this.fs.stat(targetPath);
+    } catch {
+      return null;
     }
   }
 }
