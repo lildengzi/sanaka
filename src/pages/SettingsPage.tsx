@@ -145,6 +145,7 @@ export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>(tabs.includes(initialTab as (typeof tabs)[number]) ? (initialTab as (typeof tabs)[number]) : 'general');
   const [checking, setChecking] = useState(false);
   const [checkMessage, setCheckMessage] = useState<string | null>(null);
+  const [templateImportMessage, setTemplateImportMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const nextTab = params.get('tab');
@@ -188,6 +189,14 @@ export function SettingsPage() {
     } finally {
       setChecking(false);
       setTimeout(() => setCheckMessage(null), 3000);
+    }
+  };
+
+  const handleImportTemplate = async () => {
+    const result = await importTemplateFromDialog();
+    setTemplateImportMessage(result.message ?? null);
+    if (result.message) {
+      setTimeout(() => setTemplateImportMessage(null), 4000);
     }
   };
 
@@ -382,10 +391,15 @@ export function SettingsPage() {
               {tab === 'templates' ? (
                 <SectionCard title={t('settings.tabs.templates')} description={t('settings.templatesDescription')} icon={<LayoutGridIcon />}>
               <div className="action-row">
-                <button className="button button--primary" type="button" onClick={() => void importTemplateFromDialog()}>
+                <button className="button button--primary" type="button" onClick={() => void handleImportTemplate()}>
                   {t('settings.importTemplate')}
                 </button>
               </div>
+              {templateImportMessage ? (
+                <div className="info-panel" style={{ marginBottom: '12px' }}>
+                  <p style={{ margin: 0 }}>{templateImportMessage}</p>
+                </div>
+              ) : null}
               <div className="template-library">{orderedTemplates.map(renderTemplateRow)}</div>
                 </SectionCard>
               ) : null}

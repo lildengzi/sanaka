@@ -128,7 +128,7 @@ function mockElectronApi() {
 }
 
 function StoreHarness() {
-  const { ready, draft, openSakaByPath, updateDraft, startMachine } = useAppStore();
+  const { ready, draft, openSakaByPath, updateDraft, startMachine, importTemplateFromDialog, activity } = useAppStore();
 
   if (!ready) {
     return <div>loading</div>;
@@ -157,6 +157,10 @@ function StoreHarness() {
       <button type="button" onClick={() => void startMachine(machinePath)} disabled={!draft}>
         start
       </button>
+      <button type="button" onClick={() => void importTemplateFromDialog()}>
+        import-template
+      </button>
+      <div>{activity[0]?.title ?? ''}</div>
     </div>
   );
 }
@@ -190,5 +194,27 @@ describe('AppStore startMachine', () => {
     const savedContent = firstSaveCall?.[1];
     expect(typeof savedContent).toBe('string');
     expect(savedContent).toContain('accelerator = "tcg"');
+  });
+
+  it('shows an import error when the selected svm is not a template', async () => {
+    mockElectronApi();
+    window.electronAPI.files.openSaka = vi.fn(async () => ({
+      path: '/tmp/not-template.svm',
+      configPath: '/tmp/not-template.svm',
+      content: serializeSakaMachine(createMachineFromTemplate('win11')),
+      legacySingleFile: true
+    }));
+
+    const user = userEvent.setup();
+
+    render(
+      <AppStoreProvider>
+        <StoreHarness />
+      </AppStoreProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'import-template' }));
+
+    await screen.findByText('导入失败');
   });
 });

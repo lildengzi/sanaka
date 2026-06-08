@@ -176,7 +176,7 @@ interface AppStoreValue {
   openSakaByPath: (filePath: string) => Promise<{ kind: 'machine' | 'template'; machineId: string; path?: string } | null>;
   openSakaDialog: () => Promise<{ kind: 'machine' | 'template'; machineId: string; path?: string } | null>;
   persistSettings: (next: AppSettings) => Promise<void>;
-  importTemplateFromDialog: () => Promise<void>;
+  importTemplateFromDialog: () => Promise<{ ok: boolean; message?: string }>;
   updateTemplateCatalog: (updater: (catalog: TemplateCatalogEntry[]) => TemplateCatalogEntry[]) => Promise<void>;
   createDraftFromDisk: () => Promise<{ machineId: string } | null>;
   deleteMachine: (machinePath: string) => Promise<boolean>;
@@ -222,6 +222,16 @@ function formatStartError(language: AppSettings['language'], error: string) {
     description: language === 'zh-CN' ? '无法启动虚拟机。下面是 QEMU 返回的原始错误。' : 'Could not start the virtual machine. The raw QEMU error is shown below.',
     detail: error || undefined
   };
+}
+
+function formatGenericError(language: AppSettings['language'], error: unknown, fallbackZh: string, fallbackEn: string) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  if (typeof error === 'string' && error.trim()) {
+    return error.trim();
+  }
+  return language === 'zh-CN' ? fallbackZh : fallbackEn;
 }
 
 async function readTemplateByKey(settings: AppSettings, templateKey: string) {
@@ -643,24 +653,35 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
 
   const openSakaByPath = useCallback(
     async (filePath: string) => {
-      const opened = await window.electronAPI.files.readSaka(filePath);
-      if (!opened) {
-        const next = (await window.electronAPI.recents.remove(filePath)) as RecentEntry[];
-        const parsed = recentEntrySchema.array().parse(next);
-        setRecents(parsed);
+      try {
+        const opened = await window.electronAPI.files.readSaka(filePath);
+        if (!opened) {
+          const next = (await window.electronAPI.recents.remove(filePath)) as RecentEntry[];
+          const parsed = recentEntrySchema.array().parse(next);
+          setRecents(parsed);
+          setActivity((current) => [
+            makeActivity(
+              settings.language === 'zh-CN' ? '虚拟机不可用' : 'Machine Unavailable',
+              settings.language === 'zh-CN' ? '该虚拟机文件不存在，已从最近列表移除。' : 'This machine no longer exists and was removed from recents.'
+            ),
+            ...current
+          ]);
+          if (draft?.filePath === filePath) {
+            setDraft(null);
+          }
+          return null;
+        }
+        return openSakaPayload(opened);
+      } catch (error) {
         setActivity((current) => [
           makeActivity(
-            settings.language === 'zh-CN' ? '虚拟机不可用' : 'Machine Unavailable',
-            settings.language === 'zh-CN' ? '该虚拟机文件不存在，已从最近列表移除。' : 'This machine no longer exists and was removed from recents.'
+            settings.language === 'zh-CN' ? '打开失败' : 'Open Failed',
+            formatGenericError(settings.language, error, '无法打开该 SVM/Sanaka 文件。', 'Could not open the selected SVM/Sanaka file.')
           ),
           ...current
         ]);
-        if (draft?.filePath === filePath) {
-          setDraft(null);
-        }
         return null;
       }
-      return openSakaPayload(opened);
     },
     [draft?.filePath, openSakaPayload, settings.language]
   );
@@ -668,37 +689,66 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const openSakaDialog = useCallback(async () => openSakaPayload(await window.electronAPI.files.openMachineBundle()), [openSakaPayload]);
 
   const importTemplateFromDialog = useCallback(async () => {
-    const opened = await window.electronAPI.files.openSaka();
-    if (!opened) return;
-    const parsed = parseSakaContent(opened.content);
-    if (parsed.kind !== 'template') return;
-    const existing = settings.templateCatalog.find((entry) => entry.key === parsed.template.key);
-    const catalog = existing
-      ? settings.templateCatalog.map((entry) =>
-          entry.key === parsed.template.key
-            ? { ...entry, label: parsed.template.label, source: 'imported' as const, path: opened.path }
-            : entry
-        )
-      : [
-          ...settings.templateCatalog,
-          {
-            key: parsed.template.key,
-            label: parsed.template.label,
-            source: 'imported' as const,
-            enabled: true,
-            order: settings.templateCatalog.length,
-            defaultFrontend: 'sanaka' as const,
-            path: opened.path
-          }
-        ];
-    await persistSettings({ ...settings, templateCatalog: catalog });
-    setActivity((current) => [
-      makeActivity(
-        settings.language === 'zh-CN' ? '已导入模板' : 'Template Imported',
-        settings.language === 'zh-CN' ? `已导入 ${parsed.title}。` : `Imported ${parsed.title}.`
-      ),
-      ...current
-    ]);
+    try {
+      const opened = await window.electronAPI.files.openSaka();
+      if (!opened) return { ok: false };
+      const parsed = parseSakaContent(opened.content);
+      if (parsed.kind !== 'template') {
+        const message =
+          settings.language === 'zh-CN'
+            ? '选中的 .svm 文件不是模板，不能导入到模板列表。'
+            : 'The selected .svm file is not a template and cannot be imported into the template list.';
+        setActivity((current) => [
+          makeActivity(
+            settings.language === 'zh-CN' ? '导入失败' : 'Import Failed',
+            message
+          ),
+          ...current
+        ]);
+        return { ok: false, message };
+      }
+      const existing = settings.templateCatalog.find((entry) => entry.key === parsed.template.key);
+      const catalog = existing
+        ? settings.templateCatalog.map((entry) =>
+            entry.key === parsed.template.key
+              ? { ...entry, label: parsed.template.label, source: 'imported' as const, path: opened.path }
+              : entry
+          )
+        : [
+            ...settings.templateCatalog,
+            {
+              key: parsed.template.key,
+              label: parsed.template.label,
+              source: 'imported' as const,
+              enabled: true,
+              order: settings.templateCatalog.length,
+              defaultFrontend: 'sanaka' as const,
+              path: opened.path
+            }
+          ];
+      await persistSettings({ ...settings, templateCatalog: catalog });
+      setActivity((current) => [
+        makeActivity(
+          settings.language === 'zh-CN' ? '已导入模板' : 'Template Imported',
+          settings.language === 'zh-CN' ? `已导入 ${parsed.title}。` : `Imported ${parsed.title}.`
+        ),
+        ...current
+      ]);
+      return {
+        ok: true,
+        message: settings.language === 'zh-CN' ? `已导入 ${parsed.title}。` : `Imported ${parsed.title}.`
+      };
+    } catch (error) {
+      const message = formatGenericError(settings.language, error, '无法导入该 SVM 模板。', 'Could not import the selected SVM template.');
+      setActivity((current) => [
+        makeActivity(
+          settings.language === 'zh-CN' ? '导入失败' : 'Import Failed',
+          message
+        ),
+        ...current
+      ]);
+      return { ok: false, message };
+    }
   }, [persistSettings, settings]);
 
   const updateTemplateCatalog = useCallback(
