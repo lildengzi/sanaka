@@ -2206,6 +2206,34 @@ body.platform-darwin .page--console .console-viewport {
   color: rgba(245, 241, 255, 0.96);
 }
 
+.console-dropdown__submenu {
+  position: relative;
+}
+
+.console-dropdown__item--submenu {
+  justify-content: space-between;
+}
+
+.console-dropdown__arrow {
+  margin-left: 12px;
+  opacity: 0.72;
+}
+
+.console-dropdown__submenu-panel {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 6px);
+  min-width: 180px;
+  padding: 6px;
+  background: rgba(36, 30, 46, 0.95);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 101;
+}
+
 /* --- centered state messages --- */
 .console-state {
   position: absolute;

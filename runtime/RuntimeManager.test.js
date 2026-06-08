@@ -409,6 +409,24 @@ arch = "x86_64"
     expect(changeMediaSpy).toHaveBeenCalledWith('vm-tools', '/tmp/sanaka-app/iso/sanaka-tools.iso', 'cdrom');
   });
 
+  it('mounts the bundled Linux Sanaka tools iso from the app root when available', async () => {
+    const { manager } = createManager();
+    const accessSpy = vi.spyOn(fsPromises, 'access').mockImplementation(async (targetPath) => {
+      if (String(targetPath) === '/tmp/sanaka-app/iso/sanaka-tools-linux.iso') {
+        return undefined;
+      }
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    });
+    const changeMediaSpy = vi.spyOn(manager, 'changeMedia').mockResolvedValue({ ok: true, state: null });
+
+    const result = await manager.mountSanakaToolsLinuxIso('vm-tools-linux');
+
+    expect(result.ok).toBe(true);
+    expect(changeMediaSpy).toHaveBeenCalledWith('vm-tools-linux', '/tmp/sanaka-app/iso/sanaka-tools-linux.iso', 'cdrom');
+
+    accessSpy.mockRestore();
+  });
+
   it('waits for a stopping machine to exit before reporting already running', async () => {
     const { manager, registryState } = createManager({
       builder: {

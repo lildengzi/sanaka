@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     changeMedia: (payload) => ipcRenderer.invoke('runtime:change-media', payload),
     mountBundledTestNetIso: (machineId) => ipcRenderer.invoke('runtime:mount-bundled-testnet-iso', machineId),
     mountSanakaToolsIso: (machineId) => ipcRenderer.invoke('runtime:mount-sanaka-tools-iso', machineId),
+    mountSanakaToolsLinuxIso: (machineId) => ipcRenderer.invoke('runtime:mount-sanaka-tools-linux-iso', machineId),
     getMachineState: (machineId) => ipcRenderer.invoke('runtime:get-machine-state', machineId),
     listRunningMachines: () => ipcRenderer.invoke('runtime:list-running-machines'),
     onRuntimeEvent: (handler) => on('runtime:event', handler)

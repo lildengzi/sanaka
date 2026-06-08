@@ -793,6 +793,9 @@ const ipcHandlers = {
   async mountSanakaToolsIso(_event, machineId) {
     return getRuntimeManager().mountSanakaToolsIso(machineId);
   },
+  async mountSanakaToolsLinuxIso(_event, machineId) {
+    return getRuntimeManager().mountSanakaToolsLinuxIso(machineId);
+  },
   async getMachineState(_event, machineId) {
     return getRuntimeManager().getMachineState(machineId);
   },
@@ -911,6 +914,7 @@ app.whenReady().then(() => {
   ipcMain.handle('runtime:change-media', ipcHandlers.changeMedia);
   ipcMain.handle('runtime:mount-bundled-testnet-iso', ipcHandlers.mountBundledTestNetIso);
   ipcMain.handle('runtime:mount-sanaka-tools-iso', ipcHandlers.mountSanakaToolsIso);
+  ipcMain.handle('runtime:mount-sanaka-tools-linux-iso', ipcHandlers.mountSanakaToolsLinuxIso);
   ipcMain.handle('runtime:get-machine-state', ipcHandlers.getMachineState);
   ipcMain.handle('runtime:list-running-machines', ipcHandlers.listRunningMachines);
   ipcMain.handle('machine:update-shared-folder', ipcHandlers.updateSharedFolder);

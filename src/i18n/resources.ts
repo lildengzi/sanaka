@@ -274,12 +274,18 @@ export const resources = {
       scaleFit: '适应窗口',
       scaleStretch: '拉伸',
       more: '更多',
+      enhancements: '增强功能',
+      enhancementsWindows: 'Windows',
+      enhancementsLinux: 'Linux',
       testNetWindows: '检测虚拟机网络 (Windows)',
       testNetErrorTitle: '网络检测失败',
       testNetErrorDesc: '无法挂载网络检测镜像，请确认虚拟机正在运行。',
       installSanakaTools: '安装 Sanaka 增强功能程序',
+      installSanakaToolsLinux: '安装 Sanaka 增强功能程序 (Linux)',
       mountToolsErrorTitle: '挂载工具镜像失败',
-      mountToolsErrorDesc: '无法挂载 Sanaka 增强功能工具镜像，请确认虚拟机正在运行。'
+      mountToolsErrorDesc: '无法挂载 Sanaka 增强功能工具镜像，请确认虚拟机正在运行。',
+      mountToolsMissingTitle: '找不到工具镜像',
+      mountToolsMissingDesc: '未找到对应的增强功能镜像，请先检查安装包或开发目录中的 iso 文件是否存在。'
     },
     settings: {
       title: '设置',
@@ -765,12 +771,18 @@ export const resources = {
       scaleFit: 'Fit Window',
       scaleStretch: 'Stretch',
       more: 'More',
+      enhancements: 'Enhancements',
+      enhancementsWindows: 'Windows',
+      enhancementsLinux: 'Linux',
       testNetWindows: 'Test VM Network (Windows)',
       testNetErrorTitle: 'Network Test Failed',
       testNetErrorDesc: 'Could not mount the network test image. Make sure the VM is running.',
       installSanakaTools: 'Install Sanaka Guest Enhancements',
+      installSanakaToolsLinux: 'Install Sanaka Guest Enhancements (Linux)',
       mountToolsErrorTitle: 'Mount Tools Image Failed',
-      mountToolsErrorDesc: 'Could not mount the Sanaka guest enhancement tools image. Make sure the VM is running.'
+      mountToolsErrorDesc: 'Could not mount the Sanaka guest enhancement tools image. Make sure the VM is running.',
+      mountToolsMissingTitle: 'Tools Image Not Found',
+      mountToolsMissingDesc: 'The requested guest enhancement ISO was not found. Check whether the ISO files exist in the app bundle or development workspace.'
     },
     settings: {
       title: 'Settings',

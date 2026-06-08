@@ -772,6 +772,28 @@ class RuntimeManager {
     return this.changeMedia(machineId, isoPath, 'cdrom');
   }
 
+  async mountSanakaToolsLinuxIso(machineId) {
+    const candidates = [];
+    if (typeof this.app?.getAppPath === 'function') {
+      candidates.push(path.join(this.app.getAppPath(), 'iso', 'sanaka-tools-linux.iso'));
+    }
+    if (typeof process.resourcesPath === 'string' && process.resourcesPath.length > 0) {
+      candidates.push(path.join(process.resourcesPath, 'iso', 'sanaka-tools-linux.iso'));
+    }
+    candidates.push(path.join(process.cwd(), 'iso', 'sanaka-tools-linux.iso'));
+
+    const isoPath = await this.#resolveFirstExistingPath(candidates);
+    if (!isoPath) {
+      return {
+        ok: false,
+        error: 'Bundled Linux guest enhancement ISO was not found: iso/sanaka-tools-linux.iso.',
+        state: this.#serializeState(this.registry.get(machineId))
+      };
+    }
+
+    return this.changeMedia(machineId, isoPath, 'cdrom');
+  }
+
   async dispose() {
     const active = this.registry.values();
     await Promise.all(active.map((record) => this.forceStopMachine(record.machineId).catch(() => null)));

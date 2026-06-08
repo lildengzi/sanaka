@@ -379,6 +379,7 @@ export interface ElectronApi {
     changeMedia: (payload: ChangeMediaRequest) => Promise<StopMachineResult>;
     mountBundledTestNetIso?: (machineId: string) => Promise<StopMachineResult>;
     mountSanakaToolsIso?: (machineId: string) => Promise<StopMachineResult>;
+    mountSanakaToolsLinuxIso?: (machineId: string) => Promise<StopMachineResult>;
     getMachineState: (machineId: string) => Promise<RuntimeMachineState | null>;
     listRunningMachines: () => Promise<RuntimeMachineState[]>;
     onRuntimeEvent: (handler: (payload: RuntimeEvent) => void) => () => void;

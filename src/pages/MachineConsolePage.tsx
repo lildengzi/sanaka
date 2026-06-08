@@ -128,6 +128,7 @@ export function MachineConsolePage() {
   const t = useT();
   const [infoOpen, setInfoOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [enhancementsOpen, setEnhancementsOpen] = useState(false);
   const [terminateConfirmOpen, setTerminateConfirmOpen] = useState(false);
   const [scaleMode, setScaleMode] = useState<NoVncScaleMode>('fit');
   const infoDrawer = usePresence(infoOpen, 240);
@@ -272,6 +273,7 @@ export function MachineConsolePage() {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false);
+        setEnhancementsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -279,6 +281,16 @@ export function MachineConsolePage() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [menuOpen]);
+
+  const showToolsMountError = (result: { ok: boolean; error?: string | undefined }) => {
+    const errorText = String(result.error || '');
+    const missing = errorText.includes('not found') || errorText.includes('Missing');
+    setStartError({
+      title: missing ? t('console.mountToolsMissingTitle') : t('console.mountToolsErrorTitle'),
+      description: missing ? t('console.mountToolsMissingDesc') : t('console.mountToolsErrorDesc'),
+      detail: result.error || undefined
+    });
+  };
 
   return (
     <div className="page page--console">
@@ -367,25 +379,55 @@ export function MachineConsolePage() {
                 >
                   {t('console.testNetWindows')}
                 </button>
-                <button
-                  className="console-dropdown__item"
-                  type="button"
-                  role="menuitem"
-                  onClick={async () => {
-                    setMenuOpen(false);
-                    if (!runtimeMachineId) return;
-                    const result = await window.electronAPI.runtime.mountSanakaToolsIso!(runtimeMachineId);
-                    if (!result.ok) {
-                      setStartError({
-                        title: t('console.mountToolsErrorTitle'),
-                        description: t('console.mountToolsErrorDesc'),
-                        detail: result.error || undefined
-                      });
-                    }
-                  }}
-                >
-                  {t('console.installSanakaTools')}
-                </button>
+                <div className="console-dropdown__submenu">
+                  <button
+                    className="console-dropdown__item console-dropdown__item--submenu"
+                    type="button"
+                    role="menuitem"
+                    aria-haspopup="true"
+                    aria-expanded={enhancementsOpen}
+                    onClick={() => setEnhancementsOpen((value) => !value)}
+                  >
+                    <span>{t('console.enhancements')}</span>
+                    <span className="console-dropdown__arrow">›</span>
+                  </button>
+                  {enhancementsOpen && (
+                    <div className="console-dropdown__submenu-panel" role="menu">
+                      <button
+                        className="console-dropdown__item"
+                        type="button"
+                        role="menuitem"
+                        onClick={async () => {
+                          setMenuOpen(false);
+                          setEnhancementsOpen(false);
+                          if (!runtimeMachineId) return;
+                          const result = await window.electronAPI.runtime.mountSanakaToolsIso!(runtimeMachineId);
+                          if (!result.ok) {
+                            showToolsMountError(result);
+                          }
+                        }}
+                      >
+                        {t('console.enhancementsWindows')}
+                      </button>
+                      <button
+                        className="console-dropdown__item"
+                        type="button"
+                        role="menuitem"
+                        onClick={async () => {
+                          setMenuOpen(false);
+                          setEnhancementsOpen(false);
+                          if (!runtimeMachineId) return;
+                          const result = await window.electronAPI.runtime.mountSanakaToolsLinuxIso!(runtimeMachineId);
+                          if (!result.ok) {
+                            showToolsMountError(result);
+                          }
+                        }}
+                      >
+                        {t('console.enhancementsLinux')}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
