@@ -15,6 +15,7 @@ CC_BIN=${CC:-cc}
 CFLAGS_EXTRA=${CFLAGS:-}
 
 printf '%s\n' "Building Linux clipboard client with: $CC_BIN"
+mkdir -p "$BUILD_DIR"
 
 "$CC_BIN" -std=c99 -O2 -Wall -Wextra -pedantic $CFLAGS_EXTRA -o "$OUTPUT" "$SOURCE"
 

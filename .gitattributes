@@ -1,0 +1,8 @@
+*.sh text eol=lf
+*.bash text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.desktop text eol=lf
+*.ini text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
