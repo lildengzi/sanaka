@@ -55,6 +55,7 @@ typedef struct SanakaStateTag {
   char current_mac[32];
   WCHAR status_text[64];
   HWND window_handle;
+  char log_path[MAX_PATH];
   NOTIFYICONDATAW tray_icon;
   HMENU tray_menu;
   HICON icon_handle;
@@ -75,6 +76,66 @@ static const WCHAR SANAKA_BALLOON_FAILED[] = { 0x8fde, 0x63a5, 0x5931, 0x8d25, 0
 static const WCHAR SANAKA_TOOLTIP_PREFIX[] = { 'S','a','n','a','k','a',' ','C','l','i','p','b','o','a','r','d',' ','-',' ',0x0000 };
 static const WCHAR SANAKA_WINDOW_CLASS[] = { 'S','a','n','a','k','a','C','l','i','p','b','o','a','r','d','W','i','n','d','o','w',0x0000 };
 static const WCHAR SANAKA_WINDOW_TITLE[] = { 'S','a','n','a','k','a',' ','C','l','i','p','b','o','a','r','d',0x0000 };
+
+static void sanaka_log_line(const char *message) {
+  FILE *file = NULL;
+  SYSTEMTIME now;
+  if (g_state.log_path[0] == '\0' || message == NULL) {
+    return;
+  }
+
+  file = fopen(g_state.log_path, "a");
+  if (file == NULL) {
+    return;
+  }
+
+  GetLocalTime(&now);
+  fprintf(
+    file,
+    "[%04d-%02d-%02d %02d:%02d:%02d] %s\n",
+    now.wYear,
+    now.wMonth,
+    now.wDay,
+    now.wHour,
+    now.wMinute,
+    now.wSecond,
+    message
+  );
+  fclose(file);
+}
+
+static void sanaka_log_format1(const char *prefix, const char *value) {
+  char line[1024];
+  if (prefix == NULL) {
+    return;
+  }
+  sprintf(line, "%s%s", prefix, value != NULL ? value : "");
+  sanaka_log_line(line);
+}
+
+static void sanaka_log_format_int(const char *prefix, int value) {
+  char line[256];
+  if (prefix == NULL) {
+    return;
+  }
+  sprintf(line, "%s%d", prefix, value);
+  sanaka_log_line(line);
+}
+
+static void sanaka_prepare_log_path(void) {
+  char module_path[MAX_PATH];
+  char *slash = NULL;
+  if (GetModuleFileNameA(NULL, module_path, MAX_PATH) == 0) {
+    return;
+  }
+  slash = strrchr(module_path, '\\');
+  if (slash == NULL) {
+    return;
+  }
+  *slash = '\0';
+  strcpy(g_state.log_path, module_path);
+  strcat(g_state.log_path, "\\sanaka_clipboard.log");
+}
 
 static void sanaka_zero_memory(void *ptr, size_t size) {
   unsigned char *cursor = (unsigned char *) ptr;
@@ -287,6 +348,9 @@ static int sanaka_load_config(SanakaConfig *config) {
   }
 
   fclose(file);
+  sanaka_log_format1("config host=", config->host);
+  sanaka_log_format_int("config bootstrap_port=", config->bootstrap_port);
+  sanaka_log_format_int("config protocol_version=", config->protocol_version);
   return 1;
 }
 
@@ -380,6 +444,7 @@ static int sanaka_detect_machine_mac(char *buffer, size_t buffer_size) {
   buffer[0] = '\0';
   result = GetAdaptersInfo(NULL, &size);
   if (result != ERROR_BUFFER_OVERFLOW || size == 0) {
+    sanaka_log_format_int("GetAdaptersInfo preflight failed, result=", (int) result);
     return 0;
   }
 
@@ -390,6 +455,7 @@ static int sanaka_detect_machine_mac(char *buffer, size_t buffer_size) {
 
   result = GetAdaptersInfo(adapter_info, &size);
   if (result != ERROR_SUCCESS) {
+    sanaka_log_format_int("GetAdaptersInfo failed, result=", (int) result);
     free(adapter_info);
     return 0;
   }
@@ -407,12 +473,14 @@ static int sanaka_detect_machine_mac(char *buffer, size_t buffer_size) {
         adapter->Address[4],
         adapter->Address[5]
       );
+      sanaka_log_format1("detected machine mac=", buffer);
       free(adapter_info);
       return 1;
     }
     adapter = adapter->Next;
   }
 
+  sanaka_log_line("no suitable ethernet adapter with IP address was found");
   free(adapter_info);
   return 0;
 }
@@ -454,10 +522,15 @@ static int sanaka_connect_socket(const char *host, int port) {
   address.sin_addr.s_addr = inet_addr(host);
 
   if (connect(socket_fd, (struct sockaddr *) &address, sizeof(address)) == SOCKET_ERROR) {
+    sanaka_log_format1("socket connect failed host=", host);
+    sanaka_log_format_int("socket connect failed port=", port);
+    sanaka_log_format_int("socket connect WSA error=", (int) WSAGetLastError());
     closesocket(socket_fd);
     return INVALID_SOCKET;
   }
 
+  sanaka_log_format1("socket connect ok host=", host);
+  sanaka_log_format_int("socket connect ok port=", port);
   return socket_fd;
 }
 
@@ -543,12 +616,14 @@ static int sanaka_bootstrap(SanakaState *state) {
   }
 
   if (!sanaka_detect_machine_mac(state->current_mac, sizeof(state->current_mac))) {
+    sanaka_log_line("bootstrap aborted: failed to detect machine mac");
     sanaka_set_status(state, SANAKA_STATUS_FAILED);
     sanaka_update_tray_tip(state);
     return 0;
   }
 
   if (!sanaka_escape_json_string(state->current_mac, escaped_mac, sizeof(escaped_mac))) {
+    sanaka_log_line("bootstrap aborted: failed to escape machine mac");
     return 0;
   }
 
@@ -567,17 +642,22 @@ static int sanaka_bootstrap(SanakaState *state) {
   );
 
   if (!sanaka_send_all(bootstrap_socket, payload, (int) strlen(payload))) {
+    sanaka_log_line("bootstrap send failed");
     closesocket(bootstrap_socket);
     return 0;
   }
+  sanaka_log_format1("bootstrap request sent mac=", state->current_mac);
 
   if (!sanaka_read_line(bootstrap_socket, response, sizeof(response))) {
+    sanaka_log_line("bootstrap read failed");
     closesocket(bootstrap_socket);
     return 0;
   }
   closesocket(bootstrap_socket);
+  sanaka_log_format1("bootstrap response=", response);
 
   if (strstr(response, "\"type\":\"bootstrap_ack\"") == NULL) {
+    sanaka_log_line("bootstrap did not return ack");
     sanaka_set_status(state, SANAKA_STATUS_FAILED);
     sanaka_update_tray_tip(state);
     sanaka_show_balloon(state, SANAKA_BALLOON_TITLE, SANAKA_BALLOON_FAILED, NIIF_WARNING);
@@ -585,14 +665,18 @@ static int sanaka_bootstrap(SanakaState *state) {
   }
 
   if (!sanaka_extract_json_string(response, "sessionId", state->config.session_id, sizeof(state->config.session_id))) {
+    sanaka_log_line("bootstrap ack missing sessionId");
     return 0;
   }
   if (!sanaka_extract_json_int(response, "port", &response_port)) {
+    sanaka_log_line("bootstrap ack missing port");
     return 0;
   }
 
   state->config.port = response_port;
   state->bootstrap_ready = 1;
+  sanaka_log_format1("bootstrap sessionId=", state->config.session_id);
+  sanaka_log_format_int("bootstrap assigned port=", state->config.port);
   return 1;
 }
 
@@ -619,11 +703,13 @@ static int sanaka_connect_bridge(SanakaState *state) {
   SOCKET socket_fd;
 
   if (state == NULL || state->config.port <= 0 || state->config.session_id[0] == '\0') {
+    sanaka_log_line("bridge connect skipped: port/session not ready");
     return 0;
   }
 
   socket_fd = sanaka_connect_socket(state->config.host, state->config.port);
   if (socket_fd == INVALID_SOCKET) {
+    sanaka_log_line("bridge socket connect failed");
     return 0;
   }
 
@@ -631,12 +717,14 @@ static int sanaka_connect_bridge(SanakaState *state) {
   state->connected = 1;
   state->last_heartbeat_tick = GetTickCount();
   if (!sanaka_send_hello(socket_fd, &state->config)) {
+    sanaka_log_line("bridge hello send failed");
     closesocket(socket_fd);
     state->socket_fd = INVALID_SOCKET;
     state->connected = 0;
     return 0;
   }
 
+  sanaka_log_line("bridge connected and hello sent");
   sanaka_set_status(state, SANAKA_STATUS_CONNECTED);
   sanaka_update_tray_tip(state);
   sanaka_show_balloon(state, SANAKA_BALLOON_TITLE, SANAKA_BALLOON_CONNECTED, NIIF_INFO);
@@ -655,6 +743,7 @@ static void sanaka_disconnect(SanakaState *state) {
   state->bootstrap_ready = 0;
   state->config.port = 0;
   state->config.session_id[0] = '\0';
+  sanaka_log_line("bridge disconnected");
   sanaka_set_status(state, SANAKA_STATUS_FAILED);
   sanaka_update_tray_tip(state);
 }
@@ -760,6 +849,7 @@ static int sanaka_write_clipboard_text(const char *text) {
 
   EmptyClipboard();
   if (SetClipboardData(CF_UNICODETEXT, memory) == NULL) {
+    sanaka_log_line("failed to write CF_UNICODETEXT");
     CloseClipboard();
     GlobalFree(memory);
     if (ansi_memory != NULL) {
@@ -847,6 +937,8 @@ static int sanaka_recv_once(SanakaState *state) {
 
   received = recv(state->socket_fd, buffer, sizeof(buffer) - 1, 0);
   if (received <= 0) {
+    sanaka_log_format_int("bridge recv failed, code=", received);
+    sanaka_log_format_int("bridge recv WSA error=", (int) WSAGetLastError());
     sanaka_disconnect(state);
     return 0;
   }
@@ -859,6 +951,7 @@ static int sanaka_recv_once(SanakaState *state) {
     if (sanaka_extract_json_string(buffer, "text", text_buffer, sizeof(text_buffer))
       && sanaka_extract_json_string(buffer, "hash", hash, sizeof(hash))) {
       if (sanaka_write_clipboard_text(text_buffer)) {
+        sanaka_log_line("clipboard_push applied to local clipboard");
         sanaka_copy_string(state->last_remote_applied_hash, sizeof(state->last_remote_applied_hash), hash);
         sanaka_copy_string(state->last_local_hash, sizeof(state->last_local_hash), hash);
       }
@@ -1042,6 +1135,8 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comman
   (void) show_command;
 
   sanaka_zero_memory(&g_state, sizeof(g_state));
+  sanaka_prepare_log_path();
+  sanaka_log_line("sanaka_clipboard start");
   g_state.socket_fd = INVALID_SOCKET;
   g_state.last_poll_tick = GetTickCount();
   g_state.last_reconnect_tick = GetTickCount();
@@ -1049,29 +1144,38 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comman
   sanaka_set_status(&g_state, SANAKA_STATUS_CONNECTING);
 
   if (!sanaka_load_config(&g_state.config)) {
+    sanaka_log_line("failed to load config");
     return 1;
   }
 
   sanaka_enable_autostart();
+  sanaka_log_line("autostart ensured");
 
   if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) {
+    sanaka_log_line("WSAStartup failed");
     return 1;
   }
+  sanaka_log_line("WSAStartup ok");
 
   if (!sanaka_create_message_window(&g_state, instance)) {
+    sanaka_log_line("failed to create message window");
     WSACleanup();
     return 1;
   }
+  sanaka_log_line("message window created");
 
   if (!sanaka_initialize_tray(&g_state)) {
+    sanaka_log_line("failed to initialize tray");
     DestroyWindow(g_state.window_handle);
     WSACleanup();
     return 1;
   }
+  sanaka_log_line("tray initialized");
 
   while (1) {
     while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE)) {
       if (message.message == WM_QUIT) {
+        sanaka_log_line("received WM_QUIT");
         sanaka_cleanup_tray(&g_state);
         sanaka_disconnect(&g_state);
         WSACleanup();
@@ -1084,6 +1188,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comman
     now_tick = GetTickCount();
 
     if (!g_state.connected && (now_tick - g_state.last_reconnect_tick >= SANAKA_RECONNECT_INTERVAL_MS)) {
+      sanaka_log_line("reconnect tick");
       if (!g_state.bootstrap_ready) {
         sanaka_bootstrap(&g_state);
       }
