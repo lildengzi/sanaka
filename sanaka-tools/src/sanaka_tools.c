@@ -53,15 +53,28 @@ typedef struct SanakaStateTag {
   char last_local_hash[16];
   char last_remote_applied_hash[16];
   char current_mac[32];
-  char status_text[64];
+  WCHAR status_text[64];
   HWND window_handle;
-  NOTIFYICONDATAA tray_icon;
+  NOTIFYICONDATAW tray_icon;
   HMENU tray_menu;
   HICON icon_handle;
   SanakaConfig config;
 } SanakaState;
 
 static SanakaState g_state;
+
+static const WCHAR SANAKA_STATUS_CONNECTING[] = { 0x8fde, 0x63a5, 0x4e2d, 0x0000 };
+static const WCHAR SANAKA_STATUS_CONNECTED[] = { 0x5df2, 0x8fde, 0x63a5, 0x0000 };
+static const WCHAR SANAKA_STATUS_FAILED[] = { 0x8fde, 0x63a5, 0x5931, 0x8d25, 0x0000 };
+static const WCHAR SANAKA_PORT_PREFIX[] = { 0x7aef, 0x53e3, 0xff1a, 0x0000 };
+static const WCHAR SANAKA_EXIT_LABEL[] = { 0x9000, 0x51fa, 0x0000 };
+static const WCHAR SANAKA_PORT_7935_LABEL[] = { 0x7aef, 0x53e3, 0xff1a, '7', '9', '3', '5', 0x0000 };
+static const WCHAR SANAKA_BALLOON_TITLE[] = { 'S','a','n','a','k','a',' ',0x589e,0x5f3a,0x529f,0x80fd,0x7a0b,0x5e8f,0x0000 };
+static const WCHAR SANAKA_BALLOON_CONNECTED[] = { 0x8fde, 0x63a5, 0x6210, 0x529f, 0x0000 };
+static const WCHAR SANAKA_BALLOON_FAILED[] = { 0x8fde, 0x63a5, 0x5931, 0x8d25, 0x0000 };
+static const WCHAR SANAKA_TOOLTIP_PREFIX[] = { 'S','a','n','a','k','a',' ','C','l','i','p','b','o','a','r','d',' ','-',' ',0x0000 };
+static const WCHAR SANAKA_WINDOW_CLASS[] = { 'S','a','n','a','k','a','C','l','i','p','b','o','a','r','d','W','i','n','d','o','w',0x0000 };
+static const WCHAR SANAKA_WINDOW_TITLE[] = { 'S','a','n','a','k','a',' ','C','l','i','p','b','o','a','r','d',0x0000 };
 
 static void sanaka_zero_memory(void *ptr, size_t size) {
   unsigned char *cursor = (unsigned char *) ptr;
@@ -85,6 +98,96 @@ static void sanaka_copy_string(char *dest, size_t dest_size, const char *src) {
     ++index;
   }
   dest[index] = '\0';
+}
+
+static void sanaka_copy_wstring(WCHAR *dest, size_t dest_size, const WCHAR *src) {
+  size_t index = 0;
+  if (dest == NULL || dest_size == 0) {
+    return;
+  }
+  if (src == NULL) {
+    dest[0] = L'\0';
+    return;
+  }
+  while (src[index] != L'\0' && index + 1 < dest_size) {
+    dest[index] = src[index];
+    ++index;
+  }
+  dest[index] = L'\0';
+}
+
+static int sanaka_utf16_to_utf8(const WCHAR *wide_text, char *buffer, size_t buffer_size) {
+  int result;
+  if (wide_text == NULL || buffer == NULL || buffer_size == 0) {
+    return 0;
+  }
+  result = WideCharToMultiByte(CP_UTF8, 0, wide_text, -1, buffer, (int) buffer_size, NULL, NULL);
+  return result > 0;
+}
+
+static int sanaka_ansi_to_utf8(const char *ansi_text, char *buffer, size_t buffer_size) {
+  int wide_length;
+  WCHAR *wide_buffer = NULL;
+  int ok = 0;
+
+  if (ansi_text == NULL || buffer == NULL || buffer_size == 0) {
+    return 0;
+  }
+
+  wide_length = MultiByteToWideChar(CP_ACP, 0, ansi_text, -1, NULL, 0);
+  if (wide_length <= 0) {
+    return 0;
+  }
+
+  wide_buffer = (WCHAR *) malloc((size_t) wide_length * sizeof(WCHAR));
+  if (wide_buffer == NULL) {
+    return 0;
+  }
+
+  if (MultiByteToWideChar(CP_ACP, 0, ansi_text, -1, wide_buffer, wide_length) > 0) {
+    ok = sanaka_utf16_to_utf8(wide_buffer, buffer, buffer_size);
+  }
+
+  free(wide_buffer);
+  return ok;
+}
+
+static int sanaka_utf8_to_utf16(const char *utf8_text, WCHAR *wide_buffer, int wide_capacity) {
+  int result;
+  if (utf8_text == NULL || wide_buffer == NULL || wide_capacity <= 0) {
+    return 0;
+  }
+  result = MultiByteToWideChar(CP_UTF8, 0, utf8_text, -1, wide_buffer, wide_capacity);
+  return result > 0;
+}
+
+static int sanaka_utf8_to_ansi(const char *utf8_text, char *ansi_buffer, size_t ansi_capacity) {
+  int wide_length;
+  WCHAR *wide_buffer = NULL;
+  int result;
+  int ok = 0;
+
+  if (utf8_text == NULL || ansi_buffer == NULL || ansi_capacity == 0) {
+    return 0;
+  }
+
+  wide_length = MultiByteToWideChar(CP_UTF8, 0, utf8_text, -1, NULL, 0);
+  if (wide_length <= 0) {
+    return 0;
+  }
+
+  wide_buffer = (WCHAR *) malloc((size_t) wide_length * sizeof(WCHAR));
+  if (wide_buffer == NULL) {
+    return 0;
+  }
+
+  if (MultiByteToWideChar(CP_UTF8, 0, utf8_text, -1, wide_buffer, wide_length) > 0) {
+    result = WideCharToMultiByte(CP_ACP, 0, wide_buffer, -1, ansi_buffer, (int) ansi_capacity, "?", NULL);
+    ok = result > 0;
+  }
+
+  free(wide_buffer);
+  return ok;
 }
 
 static void sanaka_hash_text(const char *text, char output[16]) {
@@ -233,35 +336,35 @@ static int sanaka_escape_json_string(const char *source, char *dest, size_t dest
   return 1;
 }
 
-static void sanaka_set_status(SanakaState *state, const char *status_text) {
+static void sanaka_set_status(SanakaState *state, const WCHAR *status_text) {
   if (state == NULL) {
     return;
   }
-  sanaka_copy_string(state->status_text, sizeof(state->status_text), status_text);
+  sanaka_copy_wstring(state->status_text, sizeof(state->status_text) / sizeof(WCHAR), status_text);
 }
 
 static void sanaka_update_tray_tip(SanakaState *state) {
-  char tip[128];
+  WCHAR tip[128];
   if (state == NULL) {
     return;
   }
 
-  sprintf(tip, "Sanaka Clipboard - %s", state->status_text[0] ? state->status_text : "连接中");
-  sanaka_copy_string(state->tray_icon.szTip, sizeof(state->tray_icon.szTip), tip);
+  wsprintfW(tip, L"%ls%ls", SANAKA_TOOLTIP_PREFIX, state->status_text[0] ? state->status_text : SANAKA_STATUS_CONNECTING);
+  sanaka_copy_wstring(state->tray_icon.szTip, sizeof(state->tray_icon.szTip) / sizeof(WCHAR), tip);
   state->tray_icon.uFlags = NIF_TIP;
-  Shell_NotifyIconA(NIM_MODIFY, &state->tray_icon);
+  Shell_NotifyIconW(NIM_MODIFY, &state->tray_icon);
 }
 
-static void sanaka_show_balloon(SanakaState *state, const char *title, const char *message, DWORD icon) {
+static void sanaka_show_balloon(SanakaState *state, const WCHAR *title, const WCHAR *message, DWORD icon) {
   if (state == NULL) {
     return;
   }
 
   state->tray_icon.uFlags = NIF_INFO;
-  sanaka_copy_string(state->tray_icon.szInfoTitle, sizeof(state->tray_icon.szInfoTitle), title);
-  sanaka_copy_string(state->tray_icon.szInfo, sizeof(state->tray_icon.szInfo), message);
+  sanaka_copy_wstring(state->tray_icon.szInfoTitle, sizeof(state->tray_icon.szInfoTitle) / sizeof(WCHAR), title);
+  sanaka_copy_wstring(state->tray_icon.szInfo, sizeof(state->tray_icon.szInfo) / sizeof(WCHAR), message);
   state->tray_icon.dwInfoFlags = icon;
-  Shell_NotifyIconA(NIM_MODIFY, &state->tray_icon);
+  Shell_NotifyIconW(NIM_MODIFY, &state->tray_icon);
 }
 
 static int sanaka_detect_machine_mac(char *buffer, size_t buffer_size) {
@@ -440,7 +543,7 @@ static int sanaka_bootstrap(SanakaState *state) {
   }
 
   if (!sanaka_detect_machine_mac(state->current_mac, sizeof(state->current_mac))) {
-    sanaka_set_status(state, "连接失败");
+    sanaka_set_status(state, SANAKA_STATUS_FAILED);
     sanaka_update_tray_tip(state);
     return 0;
   }
@@ -451,7 +554,7 @@ static int sanaka_bootstrap(SanakaState *state) {
 
   bootstrap_socket = sanaka_connect_socket(state->config.host, state->config.bootstrap_port);
   if (bootstrap_socket == INVALID_SOCKET) {
-    sanaka_set_status(state, "连接失败");
+    sanaka_set_status(state, SANAKA_STATUS_FAILED);
     sanaka_update_tray_tip(state);
     return 0;
   }
@@ -475,9 +578,9 @@ static int sanaka_bootstrap(SanakaState *state) {
   closesocket(bootstrap_socket);
 
   if (strstr(response, "\"type\":\"bootstrap_ack\"") == NULL) {
-    sanaka_set_status(state, "连接失败");
+    sanaka_set_status(state, SANAKA_STATUS_FAILED);
     sanaka_update_tray_tip(state);
-    sanaka_show_balloon(state, "Sanaka 增强功能程序", "连接失败", NIIF_WARNING);
+    sanaka_show_balloon(state, SANAKA_BALLOON_TITLE, SANAKA_BALLOON_FAILED, NIIF_WARNING);
     return 0;
   }
 
@@ -534,9 +637,9 @@ static int sanaka_connect_bridge(SanakaState *state) {
     return 0;
   }
 
-  sanaka_set_status(state, "已连接");
+  sanaka_set_status(state, SANAKA_STATUS_CONNECTED);
   sanaka_update_tray_tip(state);
-  sanaka_show_balloon(state, "Sanaka 增强功能程序", "连接成功", NIIF_INFO);
+  sanaka_show_balloon(state, SANAKA_BALLOON_TITLE, SANAKA_BALLOON_CONNECTED, NIIF_INFO);
   return 1;
 }
 
@@ -552,13 +655,14 @@ static void sanaka_disconnect(SanakaState *state) {
   state->bootstrap_ready = 0;
   state->config.port = 0;
   state->config.session_id[0] = '\0';
-  sanaka_set_status(state, "连接失败");
+  sanaka_set_status(state, SANAKA_STATUS_FAILED);
   sanaka_update_tray_tip(state);
 }
 
 static int sanaka_read_clipboard_text(char *buffer, size_t buffer_size) {
   HANDLE handle = NULL;
   WCHAR *wide_text = NULL;
+  char *ansi_text = NULL;
   int result = 0;
 
   if (buffer == NULL || buffer_size == 0) {
@@ -575,19 +679,34 @@ static int sanaka_read_clipboard_text(char *buffer, size_t buffer_size) {
   if (handle != NULL) {
     wide_text = (WCHAR *) GlobalLock(handle);
     if (wide_text != NULL) {
-      result = WideCharToMultiByte(CP_UTF8, 0, wide_text, -1, buffer, (int) buffer_size, NULL, NULL);
+      result = sanaka_utf16_to_utf8(wide_text, buffer, buffer_size);
       GlobalUnlock(handle);
     }
   }
 
+  if (!result) {
+    handle = GetClipboardData(CF_TEXT);
+    if (handle != NULL) {
+      ansi_text = (char *) GlobalLock(handle);
+      if (ansi_text != NULL) {
+        result = sanaka_ansi_to_utf8(ansi_text, buffer, buffer_size);
+        GlobalUnlock(handle);
+      }
+    }
+  }
+
   CloseClipboard();
-  return result > 0;
+  return result;
 }
 
 static int sanaka_write_clipboard_text(const char *text) {
   int wide_length;
+  size_t ansi_length;
   HGLOBAL memory = NULL;
+  HGLOBAL ansi_memory = NULL;
   WCHAR *wide_buffer = NULL;
+  char *ansi_buffer = NULL;
+  int ok = 0;
 
   if (text == NULL) {
     return 0;
@@ -609,11 +728,33 @@ static int sanaka_write_clipboard_text(const char *text) {
     return 0;
   }
 
-  MultiByteToWideChar(CP_UTF8, 0, text, -1, wide_buffer, wide_length);
+  if (!sanaka_utf8_to_utf16(text, wide_buffer, wide_length)) {
+    GlobalUnlock(memory);
+    GlobalFree(memory);
+    return 0;
+  }
   GlobalUnlock(memory);
+
+  ansi_length = strlen(text) * 2 + 2;
+  ansi_memory = GlobalAlloc(GMEM_MOVEABLE, ansi_length);
+  if (ansi_memory != NULL) {
+    ansi_buffer = (char *) GlobalLock(ansi_memory);
+    if (ansi_buffer != NULL) {
+      if (!sanaka_utf8_to_ansi(text, ansi_buffer, ansi_length)) {
+        ansi_buffer[0] = '\0';
+      }
+      GlobalUnlock(ansi_memory);
+    } else {
+      GlobalFree(ansi_memory);
+      ansi_memory = NULL;
+    }
+  }
 
   if (!OpenClipboard(NULL)) {
     GlobalFree(memory);
+    if (ansi_memory != NULL) {
+      GlobalFree(ansi_memory);
+    }
     return 0;
   }
 
@@ -621,11 +762,31 @@ static int sanaka_write_clipboard_text(const char *text) {
   if (SetClipboardData(CF_UNICODETEXT, memory) == NULL) {
     CloseClipboard();
     GlobalFree(memory);
+    if (ansi_memory != NULL) {
+      GlobalFree(ansi_memory);
+    }
     return 0;
+  }
+  memory = NULL;
+
+  if (ansi_memory != NULL) {
+    if (SetClipboardData(CF_TEXT, ansi_memory) == NULL) {
+      GlobalFree(ansi_memory);
+    } else {
+      ansi_memory = NULL;
+    }
   }
 
   CloseClipboard();
-  return 1;
+  ok = 1;
+
+  if (memory != NULL) {
+    GlobalFree(memory);
+  }
+  if (ansi_memory != NULL) {
+    GlobalFree(ansi_memory);
+  }
+  return ok;
 }
 
 static void sanaka_send_clipboard_if_changed(SanakaState *state) {
@@ -749,14 +910,14 @@ static int sanaka_enable_autostart(void) {
 }
 
 static void sanaka_tray_refresh_menu(SanakaState *state) {
-  char port_label[64];
+  WCHAR port_label[64];
   if (state == NULL || state->tray_menu == NULL) {
     return;
   }
 
-  ModifyMenuA(state->tray_menu, SANAKA_MENU_STATUS_ID, MF_BYCOMMAND | MF_STRING | MF_GRAYED, SANAKA_MENU_STATUS_ID, state->status_text[0] ? state->status_text : "连接中");
-  sprintf(port_label, "端口：%d", state->config.port > 0 ? state->config.port : state->config.bootstrap_port);
-  ModifyMenuA(state->tray_menu, SANAKA_MENU_PORT_ID, MF_BYCOMMAND | MF_STRING | MF_GRAYED, SANAKA_MENU_PORT_ID, port_label);
+  ModifyMenuW(state->tray_menu, SANAKA_MENU_STATUS_ID, MF_BYCOMMAND | MF_STRING | MF_GRAYED, SANAKA_MENU_STATUS_ID, state->status_text[0] ? state->status_text : SANAKA_STATUS_CONNECTING);
+  wsprintfW(port_label, L"%ls%d", SANAKA_PORT_PREFIX, state->config.port > 0 ? state->config.port : state->config.bootstrap_port);
+  ModifyMenuW(state->tray_menu, SANAKA_MENU_PORT_ID, MF_BYCOMMAND | MF_STRING | MF_GRAYED, SANAKA_MENU_PORT_ID, port_label);
 }
 
 static void sanaka_show_tray_menu(SanakaState *state) {
@@ -769,7 +930,7 @@ static void sanaka_show_tray_menu(SanakaState *state) {
   GetCursorPos(&point);
   SetForegroundWindow(state->window_handle);
   TrackPopupMenu(state->tray_menu, TPM_LEFTALIGN | TPM_RIGHTBUTTON, point.x, point.y, 0, state->window_handle, NULL);
-  PostMessageA(state->window_handle, WM_NULL, 0, 0);
+  PostMessageW(state->window_handle, WM_NULL, 0, 0);
 }
 
 static int sanaka_initialize_tray(SanakaState *state) {
@@ -783,10 +944,10 @@ static int sanaka_initialize_tray(SanakaState *state) {
     return 0;
   }
 
-  AppendMenuA(state->tray_menu, MF_STRING | MF_GRAYED, SANAKA_MENU_STATUS_ID, "连接中");
-  AppendMenuA(state->tray_menu, MF_STRING | MF_GRAYED, SANAKA_MENU_PORT_ID, "端口：7935");
-  AppendMenuA(state->tray_menu, MF_SEPARATOR, 0, NULL);
-  AppendMenuA(state->tray_menu, MF_STRING, SANAKA_MENU_EXIT_ID, "退出");
+  AppendMenuW(state->tray_menu, MF_STRING | MF_GRAYED, SANAKA_MENU_STATUS_ID, SANAKA_STATUS_CONNECTING);
+  AppendMenuW(state->tray_menu, MF_STRING | MF_GRAYED, SANAKA_MENU_PORT_ID, SANAKA_PORT_7935_LABEL);
+  AppendMenuW(state->tray_menu, MF_SEPARATOR, 0, NULL);
+  AppendMenuW(state->tray_menu, MF_STRING, SANAKA_MENU_EXIT_ID, SANAKA_EXIT_LABEL);
 
   sanaka_zero_memory(&state->tray_icon, sizeof(state->tray_icon));
   state->tray_icon.cbSize = sizeof(state->tray_icon);
@@ -795,9 +956,9 @@ static int sanaka_initialize_tray(SanakaState *state) {
   state->tray_icon.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
   state->tray_icon.uCallbackMessage = SANAKA_WM_TRAYICON;
   state->tray_icon.hIcon = state->icon_handle;
-  sanaka_copy_string(state->tray_icon.szTip, sizeof(state->tray_icon.szTip), "Sanaka Clipboard");
+  sanaka_copy_wstring(state->tray_icon.szTip, sizeof(state->tray_icon.szTip) / sizeof(WCHAR), L"Sanaka Clipboard");
 
-  if (!Shell_NotifyIconA(NIM_ADD, &state->tray_icon)) {
+  if (!Shell_NotifyIconW(NIM_ADD, &state->tray_icon)) {
     return 0;
   }
 
@@ -808,7 +969,7 @@ static void sanaka_cleanup_tray(SanakaState *state) {
   if (state == NULL) {
     return;
   }
-  Shell_NotifyIconA(NIM_DELETE, &state->tray_icon);
+  Shell_NotifyIconW(NIM_DELETE, &state->tray_icon);
   if (state->tray_menu != NULL) {
     DestroyMenu(state->tray_menu);
     state->tray_menu = NULL;
@@ -832,26 +993,26 @@ static LRESULT CALLBACK SanakaWindowProc(HWND hwnd, UINT message, WPARAM w_param
       PostQuitMessage(0);
       return 0;
   }
-  return DefWindowProcA(hwnd, message, w_param, l_param);
+  return DefWindowProcW(hwnd, message, w_param, l_param);
 }
 
 static int sanaka_create_message_window(SanakaState *state, HINSTANCE instance) {
-  WNDCLASSA window_class;
+  WNDCLASSW window_class;
   HWND window_handle;
 
   sanaka_zero_memory(&window_class, sizeof(window_class));
   window_class.lpfnWndProc = SanakaWindowProc;
   window_class.hInstance = instance;
-  window_class.lpszClassName = "SanakaClipboardWindow";
+  window_class.lpszClassName = SANAKA_WINDOW_CLASS;
 
-  if (RegisterClassA(&window_class) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+  if (RegisterClassW(&window_class) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
     return 0;
   }
 
-  window_handle = CreateWindowExA(
+  window_handle = CreateWindowExW(
     0,
-    "SanakaClipboardWindow",
-    "Sanaka Clipboard",
+    SANAKA_WINDOW_CLASS,
+    SANAKA_WINDOW_TITLE,
     0,
     0,
     0,
@@ -885,7 +1046,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comman
   g_state.last_poll_tick = GetTickCount();
   g_state.last_reconnect_tick = GetTickCount();
   g_state.last_heartbeat_tick = GetTickCount();
-  sanaka_set_status(&g_state, "连接中");
+  sanaka_set_status(&g_state, SANAKA_STATUS_CONNECTING);
 
   if (!sanaka_load_config(&g_state.config)) {
     return 1;
@@ -909,7 +1070,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR comman
   }
 
   while (1) {
-    while (PeekMessageA(&message, NULL, 0, 0, PM_REMOVE)) {
+    while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE)) {
       if (message.message == WM_QUIT) {
         sanaka_cleanup_tray(&g_state);
         sanaka_disconnect(&g_state);
