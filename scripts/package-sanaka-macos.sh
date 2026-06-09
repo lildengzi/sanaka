@@ -13,6 +13,16 @@ QEMU_BUILD_DIR="$(cd "$1" && pwd)"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUTPUT_ROOT="$REPO_ROOT/release"
 
+resolve_macos_arch() {
+  local app_path="$1"
+  case "$app_path" in
+    *mac-arm64/*) printf '%s\n' "arm64" ;;
+    *mac-aarch64/*) printf '%s\n' "aarch64" ;;
+    *mac-x64/*) printf '%s\n' "x64" ;;
+    *) uname -m ;;
+  esac
+}
+
 cd "$REPO_ROOT"
 
 npm run build
@@ -36,6 +46,12 @@ fi
 
 touch "$APP_PATH" || true
 
+MACOS_ARCH="$(resolve_macos_arch "$APP_PATH")"
+DMG_NAME="$(node "$REPO_ROOT/build/artifact-names.js" file macos "$MACOS_ARCH" dmg)"
+
 echo
 sanaka_log "package_macos.packaged_app"
 echo "$APP_PATH"
+echo
+sanaka_log "package_macos.packaged_dmg_name"
+echo "$DMG_NAME"

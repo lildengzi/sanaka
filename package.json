@@ -28,6 +28,7 @@
     "appId": "com.sanakaprix.sanaka",
     "asar": true,
     "afterPack": "build/after-pack.js",
+    "artifactBuildCompleted": "build/artifact-build-completed.js",
     "electronDist": "node_modules/electron/dist",
     "extraResources": [
       "iso/**/*"
@@ -101,7 +102,8 @@
     "nsis": {
       "perMachine": true,
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "sanaka-${version}-win-${arch}.${ext}"
     },
     "linux": {
       "icon": "assets/icons/sanakafish.png",
@@ -112,7 +114,7 @@
       "maintainer": "Sanakaprix",
       "synopsis": "Sanaka virtual machine frontend",
       "description": "Sanaka is an Electron-based QEMU virtual machine frontend with built-in noVNC console integration.",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "sanaka-${version}-linux-${arch}.${ext}"
     },
     "deb": {
       "packageCategory": "utils",

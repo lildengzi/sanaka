@@ -107,10 +107,15 @@ sanaka_i18n_put "embed_windows.qemu_target" 'QEMU target: %s'
 
 sanaka_i18n_put "package_macos.app_not_found" 'Unable to locate packaged Sanaka.app under %s'
 sanaka_i18n_put "package_macos.packaged_app" 'Packaged app with embedded QEMU:'
+sanaka_i18n_put "package_macos.packaged_dmg_name" 'Suggested macOS dmg file name:'
 
 sanaka_i18n_put "package_windows.qemu_not_found" 'QEMU directory was not found automatically.'
 sanaka_i18n_put "package_windows.app_not_found" 'Unable to locate win-unpacked under %s'
 sanaka_i18n_put "package_windows.packaged_app" 'Packaged Windows app with embedded QEMU:'
+sanaka_i18n_put "package_windows.artifact_base_name" 'Suggested Windows artifact base name:'
+sanaka_i18n_put "package_windows.installer_name" 'Suggested Windows installer file name:'
+
+sanaka_i18n_put "package_linux.deb_name" 'Suggested Linux deb file name:'
 
 sanaka_i18n_put "pull.missing_git" 'git was not found. Please install Git first.'
 sanaka_i18n_put "pull.missing_npm" 'npm was not found. Please install Node.js first.'

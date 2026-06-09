@@ -54,6 +54,15 @@ fi
 
 bash "$REPO_ROOT/scripts/embed-qemu-windows.sh" "$QEMU_DIR" "$APP_DIR"
 
+ARTIFACT_BASE_NAME="$(node "$REPO_ROOT/build/artifact-names.js" base win x64)"
+INSTALLER_NAME="$(node "$REPO_ROOT/build/artifact-names.js" file win x64 exe)"
+
 echo
 sanaka_log "package_windows.packaged_app"
 echo "$APP_DIR"
+echo
+sanaka_log "package_windows.artifact_base_name"
+echo "$ARTIFACT_BASE_NAME"
+echo
+sanaka_log "package_windows.installer_name"
+echo "$INSTALLER_NAME"

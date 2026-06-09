@@ -11,6 +11,16 @@ OUTPUT_ROOT="$REPO_ROOT/release"
 DMG_BACKGROUND="$REPO_ROOT/build/dmg.png"
 CREATE_DMG_BIN="${CREATE_DMG_BIN:-/opt/homebrew/opt/create-dmg/bin/create-dmg}"
 
+resolve_macos_arch() {
+  local app_path="$1"
+  case "$app_path" in
+    *mac-arm64/*) printf '%s\n' "arm64" ;;
+    *mac-aarch64/*) printf '%s\n' "aarch64" ;;
+    *mac-x64/*) printf '%s\n' "x64" ;;
+    *) uname -m ;;
+  esac
+}
+
 if [[ ! -d "$QEMU_BUILD_DIR" ]]; then
   sanaka_log "quick_build.qemu_dir_not_found" >&2
   echo "  $QEMU_BUILD_DIR" >&2
@@ -39,7 +49,9 @@ if [[ ! -f "$DMG_BACKGROUND" ]]; then
   exit 1
 fi
 
-FINAL_DMG_PATH="$OUTPUT_ROOT/Sanaka.dmg"
+MACOS_ARCH="$(resolve_macos_arch "$APP_PATH")"
+FINAL_DMG_NAME="$(node "$REPO_ROOT/build/artifact-names.js" file macos "$MACOS_ARCH" dmg)"
+FINAL_DMG_PATH="$OUTPUT_ROOT/$FINAL_DMG_NAME"
 
 if [[ ! -x "$CREATE_DMG_BIN" ]]; then
   sanaka_log "quick_build.create_dmg_not_found" >&2

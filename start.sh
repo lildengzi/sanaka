@@ -404,6 +404,16 @@ run_action() {
       bash "$ROOT_DIR/scripts/doctor.sh" --auto --no-build
     fi
     "${ACTION_COMMAND[@]}"
+    if [[ "$ACTION_ID" == "pack-win-installer" ]]; then
+      echo
+      sanaka_log "package_windows.installer_name"
+      node "$ROOT_DIR/build/artifact-names.js" file win x64 exe
+    fi
+    if [[ "$ACTION_ID" == "pack-linux" ]]; then
+      echo
+      sanaka_log "package_linux.deb_name"
+      node "$ROOT_DIR/build/artifact-names.js" file linux x64 deb
+    fi
   )
 }
 

@@ -107,10 +107,15 @@ sanaka_i18n_put "embed_windows.qemu_target" 'QEMU 目标: %s'
 
 sanaka_i18n_put "package_macos.app_not_found" '无法在 %s 下找到打包后的 Sanaka.app'
 sanaka_i18n_put "package_macos.packaged_app" '已打包带内置 QEMU 的应用:'
+sanaka_i18n_put "package_macos.packaged_dmg_name" '推荐的 macOS dmg 文件名:'
 
 sanaka_i18n_put "package_windows.qemu_not_found" '未能自动找到 QEMU 目录。'
 sanaka_i18n_put "package_windows.app_not_found" '无法在 %s 下找到 win-unpacked'
 sanaka_i18n_put "package_windows.packaged_app" '已打包带内置 QEMU 的 Windows 应用:'
+sanaka_i18n_put "package_windows.artifact_base_name" '推荐的 Windows 包名基准:'
+sanaka_i18n_put "package_windows.installer_name" '推荐的 Windows 安装包文件名:'
+
+sanaka_i18n_put "package_linux.deb_name" '推荐的 Linux deb 文件名:'
 
 sanaka_i18n_put "pull.missing_git" '没找到 git。请先安装 Git。'
 sanaka_i18n_put "pull.missing_npm" '没找到 npm。请先安装 Node.js。'
