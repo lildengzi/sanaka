@@ -6,6 +6,7 @@ const { DiskImageService } = require('./runtime/DiskImageService');
 const { ExportService } = require('./runtime/ExportService');
 const { RuntimeManager } = require('./runtime/RuntimeManager');
 const { UpdateService } = require('./runtime/UpdateService');
+const { WebModeService } = require('./runtime/WebModeService');
 
 const SETTINGS_FILE = 'settings.json';
 const RECENTS_FILE = 'recents.json';
@@ -15,6 +16,7 @@ const MACHINE_PREVIEW_FILE = 'preview.png';
 const MACHINE_DISKS_DIRECTORY = 'Disks';
 const DEFAULT_MACHINE_ROOT = 'Sanaka';
 const APP_ICON_PATH = path.join(__dirname, 'assets', 'icons', 'sanakafish.png');
+const DEFAULT_WEB_MODE_PORT = 25895;
 
 app.setName('Sanaka');
 
@@ -31,6 +33,7 @@ let runtimeManager = null;
 let diskImageService = null;
 let exportService = null;
 let updateService = null;
+let webModeService = null;
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
@@ -73,6 +76,9 @@ function emitToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
   }
+  if (webModeService) {
+    webModeService.emit(channel, payload);
+  }
 }
 
 function emitRuntimeEvent(payload) {
@@ -105,6 +111,16 @@ function getUpdateService() {
   return updateService;
 }
 
+async function readEffectiveSettings() {
+  const loaded = await readJsonFile(SETTINGS_FILE, null);
+  return {
+    ...(loaded || {}),
+    webMode: {
+      port: Number.isInteger(loaded?.webMode?.port) ? loaded.webMode.port : DEFAULT_WEB_MODE_PORT
+    }
+  };
+}
+
 function getExportService() {
   if (!exportService) {
     exportService = new ExportService({
@@ -113,6 +129,51 @@ function getExportService() {
     });
   }
   return exportService;
+}
+
+function getWebModeService() {
+  return webModeService;
+}
+
+async function ensureWebModeService() {
+  const settings = await readEffectiveSettings();
+  const configuredPort = Number.isInteger(settings.webMode?.port) ? settings.webMode.port : DEFAULT_WEB_MODE_PORT;
+
+  if (!webModeService || webModeService.port !== configuredPort) {
+    if (webModeService) {
+      await webModeService.stop().catch(() => null);
+    }
+
+    webModeService = new WebModeService({
+      appName: app.getName(),
+      appVersion: app.getVersion(),
+      port: configuredPort,
+      distDir: path.join(__dirname, 'dist'),
+      getRuntimeSummary: async () => {
+        const environment = await getRuntimeManager().getRuntimeEnvironment().catch(() => null);
+        const runningMachines = await getRuntimeManager().listRunningMachines().catch(() => []);
+        return {
+          qemuAvailable: Boolean(environment?.available),
+          runningMachines: Array.isArray(runningMachines) ? runningMachines.length : 0
+        };
+      },
+      invokeHandlers: webInvokeHandlers
+    });
+  }
+
+  return webModeService;
+}
+
+function wrapWebInvoke(handler, mode = 'spread') {
+  if (mode === 'none') {
+    return () => handler();
+  }
+
+  if (mode === 'single') {
+    return (arg) => handler(undefined, arg);
+  }
+
+  return (...args) => handler(undefined, ...args);
 }
 
 function normalizeSakaArg(argv) {
@@ -422,7 +483,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      sandbox: false
     }
   });
 
@@ -432,6 +494,26 @@ function createWindow() {
   } else {
     mainWindow.loadFile(getDistIndexPath());
   }
+
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    console.log(`[renderer console:${level}] ${sourceId}:${line} ${message}`);
+  });
+
+  mainWindow.webContents.on('preload-error', (_event, preloadPath, error) => {
+    console.error(`[preload error] ${preloadPath}`, error);
+  });
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[render-process-gone]', details);
+  });
+
+  mainWindow.webContents.on('unresponsive', () => {
+    console.error('[renderer] unresponsive');
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error('[did-fail-load]', { errorCode, errorDescription, validatedURL });
+  });
 
   mainWindow.webContents.on('did-finish-load', () => {
     if (pendingSakaPaths.length > 0) {
@@ -731,7 +813,7 @@ const ipcHandlers = {
     return selectedPath ? { path: selectedPath } : null;
   },
   async loadSettings() {
-    return readJsonFile(SETTINGS_FILE, null);
+    return readEffectiveSettings();
   },
   async saveSettings(_event, settings) {
     return writeJsonFile(SETTINGS_FILE, settings);
@@ -762,6 +844,25 @@ const ipcHandlers = {
       documentsPath: app.getPath('documents'),
       defaultMachineDirectory
     };
+  },
+  async openWebMode() {
+    const state = await (await ensureWebModeService()).start();
+    const openUrl = state.localUrl || state.url;
+    if (!openUrl) {
+      throw new Error('Web mode did not provide a usable local URL.');
+    }
+    console.log(`[web-mode] opened at ${openUrl}`);
+    await shell.openExternal(openUrl);
+    return state;
+  },
+  async getWebModeState() {
+    const service = await ensureWebModeService();
+    return service.getState();
+  },
+  async stopWebMode() {
+    const service = await ensureWebModeService();
+    await service.stop();
+    return { ok: true };
   },
   consumePendingSakaPaths() {
     const pending = [...pendingSakaPaths];
@@ -838,6 +939,84 @@ const ipcHandlers = {
   },
   async cancelExport(_event, taskId) {
     return getExportService().cancelExport(taskId);
+  }
+};
+
+const webInvokeHandlers = {
+  files: {
+    openMachineBundle: wrapWebInvoke(ipcHandlers.openMachineBundle, 'none'),
+    openSaka: wrapWebInvoke(ipcHandlers.openSaka, 'none'),
+    createMachineBundle: wrapWebInvoke(ipcHandlers.createMachineBundle, 'single'),
+    readSaka: wrapWebInvoke(ipcHandlers.readSaka, 'single'),
+    saveSaka: wrapWebInvoke(ipcHandlers.saveSaka, 'single'),
+    saveSakaAs: wrapWebInvoke(ipcHandlers.saveSakaAs, 'single'),
+    trashMachineBundle: wrapWebInvoke(ipcHandlers.trashMachineBundle, 'single'),
+    renamePath: wrapWebInvoke(ipcHandlers.renamePath, 'single'),
+    copyPath: wrapWebInvoke(ipcHandlers.copyPath, 'single'),
+    openPath: wrapWebInvoke(ipcHandlers.openPath, 'single'),
+    openFolder: wrapWebInvoke(ipcHandlers.openFolder, 'single'),
+    pathExists: wrapWebInvoke(ipcHandlers.pathExists, 'single')
+  },
+  dialogs: {
+    selectFolder: wrapWebInvoke(ipcHandlers.selectFolder, 'none'),
+    pickDisk: wrapWebInvoke(ipcHandlers.pickDisk, 'none'),
+    pickIso: wrapWebInvoke(ipcHandlers.pickIso, 'none'),
+    pickFirmwareCode: wrapWebInvoke(ipcHandlers.pickFirmwareCode, 'none'),
+    pickFirmwareVars: wrapWebInvoke(ipcHandlers.pickFirmwareVars, 'none')
+  },
+  disks: {
+    getInfo: wrapWebInvoke(ipcHandlers.getDiskInfo, 'single'),
+    create: wrapWebInvoke(ipcHandlers.createDisk, 'single'),
+    prepareManaged: wrapWebInvoke(ipcHandlers.prepareManagedDisk, 'single'),
+    resize: wrapWebInvoke(ipcHandlers.resizeDisk, 'single'),
+    convert: wrapWebInvoke(ipcHandlers.convertDisk, 'single'),
+    reclaimSpace: wrapWebInvoke(ipcHandlers.reclaimDiskSpace, 'single'),
+    listLocalImages: wrapWebInvoke(ipcHandlers.listLocalImages, 'single')
+  },
+  settings: {
+    load: wrapWebInvoke(ipcHandlers.loadSettings, 'none'),
+    save: wrapWebInvoke(ipcHandlers.saveSettings, 'single')
+  },
+  recents: {
+    list: wrapWebInvoke(ipcHandlers.listRecents, 'none'),
+    push: wrapWebInvoke(ipcHandlers.pushRecent, 'single'),
+    remove: wrapWebInvoke(ipcHandlers.removeRecent, 'single')
+  },
+  runtime: {
+    detectQemu: wrapWebInvoke(ipcHandlers.detectQemu, 'none'),
+    getRuntimeEnvironment: wrapWebInvoke(ipcHandlers.getRuntimeEnvironment, 'none'),
+    getSharedFolderEnvironment: wrapWebInvoke(ipcHandlers.getSharedFolderEnvironment, 'none'),
+    previewMachineCommand: wrapWebInvoke(ipcHandlers.previewMachineCommand, 'single'),
+    startMachine: wrapWebInvoke(ipcHandlers.startMachine, 'single'),
+    stopMachine: wrapWebInvoke(ipcHandlers.stopMachine, 'single'),
+    forceStopMachine: wrapWebInvoke(ipcHandlers.forceStopMachine, 'single'),
+    resetMachine: wrapWebInvoke(ipcHandlers.resetMachine, 'single'),
+    changeMedia: wrapWebInvoke(ipcHandlers.changeMedia, 'single'),
+    mountBundledTestNetIso: wrapWebInvoke(ipcHandlers.mountBundledTestNetIso, 'single'),
+    mountSanakaToolsIso: wrapWebInvoke(ipcHandlers.mountSanakaToolsIso, 'single'),
+    mountSanakaToolsLinuxIso: wrapWebInvoke(ipcHandlers.mountSanakaToolsLinuxIso, 'single'),
+    getMachineState: wrapWebInvoke(ipcHandlers.getMachineState, 'single'),
+    listRunningMachines: wrapWebInvoke(ipcHandlers.listRunningMachines, 'none')
+  },
+  machine: {
+    updateSharedFolder: wrapWebInvoke(ipcHandlers.updateSharedFolder, 'spread'),
+    updateClipboardBridge: wrapWebInvoke(ipcHandlers.updateClipboardBridge, 'spread'),
+    exportMachine: wrapWebInvoke(ipcHandlers.exportMachine, 'single'),
+    cancelExport: wrapWebInvoke(ipcHandlers.cancelExport, 'single')
+  },
+  updater: {
+    getCurrentInfo: wrapWebInvoke(ipcHandlers.getUpdaterCurrentInfo, 'none'),
+    checkForUpdates: wrapWebInvoke(ipcHandlers.checkForUpdates, 'single'),
+    skipVersion: wrapWebInvoke(ipcHandlers.skipUpdateVersion, 'single'),
+    openUpdatePage: wrapWebInvoke(ipcHandlers.openUpdatePage, 'single')
+  },
+  app: {
+    getMetadata: wrapWebInvoke(ipcHandlers.getAppMetadata, 'none'),
+    openWebMode: wrapWebInvoke(ipcHandlers.openWebMode, 'none'),
+    getWebModeState: wrapWebInvoke(ipcHandlers.getWebModeState, 'none'),
+    stopWebMode: wrapWebInvoke(ipcHandlers.stopWebMode, 'none'),
+    consumePendingSakaPaths: wrapWebInvoke(ipcHandlers.consumePendingSakaPaths, 'none'),
+    openExternal: wrapWebInvoke(ipcHandlers.openExternal, 'single')
   }
 };
 
@@ -919,6 +1098,9 @@ app.whenReady().then(() => {
   ipcMain.handle('recents:push', ipcHandlers.pushRecent);
   ipcMain.handle('recents:remove', ipcHandlers.removeRecent);
   ipcMain.handle('app:get-metadata', ipcHandlers.getAppMetadata);
+  ipcMain.handle('app:open-web-mode', ipcHandlers.openWebMode);
+  ipcMain.handle('app:get-web-mode-state', ipcHandlers.getWebModeState);
+  ipcMain.handle('app:stop-web-mode', ipcHandlers.stopWebMode);
   ipcMain.handle('app:consume-pending-saka-paths', ipcHandlers.consumePendingSakaPaths);
   ipcMain.handle('app:open-external', ipcHandlers.openExternal);
   ipcMain.handle('updater:get-current-info', ipcHandlers.getUpdaterCurrentInfo);
@@ -960,6 +1142,9 @@ app.on('activate', () => {
 app.on('before-quit', async () => {
   if (updateService) {
     updateService.dispose();
+  }
+  if (webModeService) {
+    await webModeService.stop().catch(() => null);
   }
   if (runtimeManager) {
     await runtimeManager.dispose().catch(() => null);

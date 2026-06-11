@@ -177,6 +177,60 @@ static void sanaka_copy_wstring(WCHAR *dest, size_t dest_size, const WCHAR *src)
   dest[index] = L'\0';
 }
 
+static void sanaka_normalize_newlines_to_lf(char *text) {
+  size_t read_index = 0;
+  size_t write_index = 0;
+  if (text == NULL) {
+    return;
+  }
+  while (text[read_index] != '\0') {
+    if (text[read_index] == '\r') {
+      text[write_index++] = '\n';
+      if (text[read_index + 1] == '\n') {
+        ++read_index;
+      }
+    } else {
+      text[write_index++] = text[read_index];
+    }
+    ++read_index;
+  }
+  text[write_index] = '\0';
+}
+
+static int sanaka_normalize_newlines_to_crlf(const char *source, char *dest, size_t dest_size) {
+  size_t read_index = 0;
+  size_t write_index = 0;
+  if (source == NULL || dest == NULL || dest_size == 0) {
+    return 0;
+  }
+  while (source[read_index] != '\0') {
+    if (source[read_index] == '\r') {
+      if (write_index + 2 >= dest_size) {
+        return 0;
+      }
+      dest[write_index++] = '\r';
+      dest[write_index++] = '\n';
+      if (source[read_index + 1] == '\n') {
+        ++read_index;
+      }
+    } else if (source[read_index] == '\n') {
+      if (write_index + 2 >= dest_size) {
+        return 0;
+      }
+      dest[write_index++] = '\r';
+      dest[write_index++] = '\n';
+    } else {
+      if (write_index + 1 >= dest_size) {
+        return 0;
+      }
+      dest[write_index++] = source[read_index];
+    }
+    ++read_index;
+  }
+  dest[write_index] = '\0';
+  return 1;
+}
+
 static int sanaka_utf16_to_utf8(const WCHAR *wide_text, char *buffer, size_t buffer_size) {
   int result;
   if (wide_text == NULL || buffer == NULL || buffer_size == 0) {
@@ -536,30 +590,56 @@ static int sanaka_connect_socket(const char *host, int port) {
 
 static int sanaka_extract_json_string(const char *json, const char *key, char *out, size_t out_size) {
   char pattern[64];
-  char *start = NULL;
-  char *end = NULL;
-  size_t length = 0;
+  const char *start = NULL;
+  const char *cursor = NULL;
+  size_t out_index = 0;
   if (json == NULL || key == NULL || out == NULL || out_size == 0) {
     return 0;
   }
 
   sprintf(pattern, "\"%s\":\"", key);
-  start = strstr((char *) json, pattern);
+  start = strstr(json, pattern);
   if (start == NULL) {
     return 0;
   }
   start += strlen(pattern);
-  end = strchr(start, '"');
-  if (end == NULL) {
+  cursor = start;
+
+  while (*cursor != '\0' && *cursor != '"') {
+    if (*cursor == '\\') {
+      cursor++;
+      if (*cursor == '\0') {
+        return 0;
+      }
+      if (out_index + 1 >= out_size) {
+        return 0;
+      }
+      if (*cursor == 'n') {
+        out[out_index++] = '\n';
+      } else if (*cursor == 'r') {
+        out[out_index++] = '\r';
+      } else if (*cursor == 't') {
+        out[out_index++] = '\t';
+      } else if (*cursor == '"' || *cursor == '\\' || *cursor == '/') {
+        out[out_index++] = *cursor;
+      } else {
+        return 0;
+      }
+      cursor++;
+      continue;
+    }
+
+    if (out_index + 1 >= out_size) {
+      return 0;
+    }
+    out[out_index++] = *cursor++;
+  }
+
+  if (*cursor != '"') {
     return 0;
   }
 
-  length = (size_t) (end - start);
-  if (length + 1 > out_size) {
-    return 0;
-  }
-  memcpy(out, start, length);
-  out[length] = '\0';
+  out[out_index] = '\0';
   return 1;
 }
 
@@ -785,29 +865,46 @@ static int sanaka_read_clipboard_text(char *buffer, size_t buffer_size) {
   }
 
   CloseClipboard();
+  if (result) {
+    sanaka_normalize_newlines_to_lf(buffer);
+  }
   return result;
 }
 
 static int sanaka_write_clipboard_text(const char *text) {
   int wide_length;
+  size_t normalized_length;
   size_t ansi_length;
   HGLOBAL memory = NULL;
   HGLOBAL ansi_memory = NULL;
   WCHAR *wide_buffer = NULL;
   char *ansi_buffer = NULL;
+  char *normalized_text = NULL;
   int ok = 0;
 
   if (text == NULL) {
     return 0;
   }
 
-  wide_length = MultiByteToWideChar(CP_UTF8, 0, text, -1, NULL, 0);
+  normalized_length = strlen(text) * 2 + 2;
+  normalized_text = (char *) malloc(normalized_length);
+  if (normalized_text == NULL) {
+    return 0;
+  }
+  if (!sanaka_normalize_newlines_to_crlf(text, normalized_text, normalized_length)) {
+    free(normalized_text);
+    return 0;
+  }
+
+  wide_length = MultiByteToWideChar(CP_UTF8, 0, normalized_text, -1, NULL, 0);
   if (wide_length <= 0) {
+    free(normalized_text);
     return 0;
   }
 
   memory = GlobalAlloc(GMEM_MOVEABLE, (SIZE_T) wide_length * sizeof(WCHAR));
   if (memory == NULL) {
+    free(normalized_text);
     return 0;
   }
 
@@ -817,19 +914,20 @@ static int sanaka_write_clipboard_text(const char *text) {
     return 0;
   }
 
-  if (!sanaka_utf8_to_utf16(text, wide_buffer, wide_length)) {
+  if (!sanaka_utf8_to_utf16(normalized_text, wide_buffer, wide_length)) {
     GlobalUnlock(memory);
     GlobalFree(memory);
+    free(normalized_text);
     return 0;
   }
   GlobalUnlock(memory);
 
-  ansi_length = strlen(text) * 2 + 2;
+  ansi_length = strlen(normalized_text) * 2 + 2;
   ansi_memory = GlobalAlloc(GMEM_MOVEABLE, ansi_length);
   if (ansi_memory != NULL) {
     ansi_buffer = (char *) GlobalLock(ansi_memory);
     if (ansi_buffer != NULL) {
-      if (!sanaka_utf8_to_ansi(text, ansi_buffer, ansi_length)) {
+      if (!sanaka_utf8_to_ansi(normalized_text, ansi_buffer, ansi_length)) {
         ansi_buffer[0] = '\0';
       }
       GlobalUnlock(ansi_memory);
@@ -844,6 +942,7 @@ static int sanaka_write_clipboard_text(const char *text) {
     if (ansi_memory != NULL) {
       GlobalFree(ansi_memory);
     }
+    free(normalized_text);
     return 0;
   }
 
@@ -875,6 +974,9 @@ static int sanaka_write_clipboard_text(const char *text) {
   }
   if (ansi_memory != NULL) {
     GlobalFree(ansi_memory);
+  }
+  if (normalized_text != NULL) {
+    free(normalized_text);
   }
   return ok;
 }

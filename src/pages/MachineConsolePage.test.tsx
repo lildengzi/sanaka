@@ -134,6 +134,9 @@ describe('MachineConsolePage', () => {
           documentsPath: '/tmp/Documents',
           defaultMachineDirectory: '/tmp/Documents/Sanaka'
         })),
+        openWebMode: vi.fn(async () => ({ active: true, url: 'http://127.0.0.1:39281/', localUrl: 'http://127.0.0.1:39281/', networkUrl: 'http://192.168.1.8:39281/', host: '0.0.0.0', port: 39281, startedAt: new Date().toISOString(), localOnly: false })),
+        getWebModeState: vi.fn(async () => ({ active: false, url: null, localUrl: null, networkUrl: null, host: '0.0.0.0', port: null, startedAt: null, localOnly: false })),
+        stopWebMode: vi.fn(async () => ({ ok: true as const })),
         consumePendingSakaPaths: vi.fn(async () => []),
         openExternal: vi.fn(async () => ({ ok: true as const })),
         onOpenSaka: vi.fn(() => () => undefined),
@@ -270,6 +273,9 @@ describe('MachineConsolePage', () => {
           documentsPath: '/tmp/Documents',
           defaultMachineDirectory: '/tmp/Documents/Sanaka'
         })),
+        openWebMode: vi.fn(async () => ({ active: true, url: 'http://127.0.0.1:39281/', localUrl: 'http://127.0.0.1:39281/', networkUrl: 'http://192.168.1.8:39281/', host: '0.0.0.0', port: 39281, startedAt: new Date().toISOString(), localOnly: false })),
+        getWebModeState: vi.fn(async () => ({ active: false, url: null, localUrl: null, networkUrl: null, host: '0.0.0.0', port: null, startedAt: null, localOnly: false })),
+        stopWebMode: vi.fn(async () => ({ ok: true as const })),
         consumePendingSakaPaths: vi.fn(async () => []),
         openExternal: vi.fn(async () => ({ ok: true as const })),
         onOpenSaka: vi.fn(() => () => undefined),
