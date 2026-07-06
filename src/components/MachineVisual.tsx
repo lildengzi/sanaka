@@ -108,6 +108,29 @@ export function MachineVisual({
           }
         }}
       />
+      {onPlayClick ? (
+        <button
+          className="machine-visual__play-btn machine-visual__play-btn--overlay"
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPlayClick();
+          }}
+          title={isRunning ? "进入控制台" : "启动虚拟机"}
+        >
+          {isRunning ? (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '28px', height: '28px' }}>
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: '28px', height: '28px', marginLeft: '3px' }}>
+              <polygon points="5 3 19 12 5 21" />
+            </svg>
+          )}
+        </button>
+      ) : null}
     </div>
   );
 }

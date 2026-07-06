@@ -5,6 +5,7 @@ import { SectionCard, StatusChip } from '../components/Field';
 import { MaterialSelect } from '../components/MaterialSelect';
 import { DiskImageManager } from '../components/DiskImageManager';
 import { Checkbox } from '../components/Checkbox';
+import { QemuArgsList } from '../components/QemuArgsList';
 import { useT } from '../hooks/useT';
 import { collectMachineWarnings, getSupportedAccelerators, isGuestArchCompatibleWithHost, makeAudioHint, makeDisplayHint } from '../lib/machine';
 import { machineRoute } from '../lib/routes';
@@ -1328,15 +1329,13 @@ export function MachineBuilderPage() {
                   onChange={(nextValue: SakaMachine['advanced']['audio_backend']) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, audio_backend: nextValue } }))}
                 />
               </div>
-              <label className="field form-row-align form-row-align--top">
-                <span className="field__label">{t('builder.labels.advancedArgs')}</span>
-                <textarea
-                  className="code-textarea"
-                  rows={4}
-                  value={machine.advanced.qemu_args}
-                  onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, qemu_args: event.target.value } }))}
+              <div className="form-row-align form-row-align--top">
+                <QemuArgsList
+                  machine={machine}
+                  onChange={(next) => updateDraft(() => next)}
+                  t={t}
                 />
-              </label>
+              </div>
             </div>
           </SectionCard>
         </div>

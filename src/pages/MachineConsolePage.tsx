@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/AppStore';
 import { useT } from '../hooks/useT';
-import { NoVncViewport, type NoVncScaleMode } from '../components/NoVncViewport';
+import { NoVncViewport, type NoVncInputMode, type NoVncScaleMode, type NoVncViewportHandle } from '../components/NoVncViewport';
 import { usePresence } from '../hooks/usePresence';
 import { makeAudioHint, makeDisplayHint } from '../lib/machine';
 import { formatRuntimeBackend } from '../lib/console-session';
@@ -213,6 +213,48 @@ const MoreIcon = () => (
   </svg>
 );
 
+const KeyboardIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <line x1="6" y1="8" x2="6" y2="8" />
+    <line x1="10" y1="8" x2="10" y2="8" />
+    <line x1="14" y1="8" x2="14" y2="8" />
+    <line x1="18" y1="8" x2="18" y2="8" />
+    <line x1="6" y1="12" x2="6" y2="12" />
+    <line x1="10" y1="12" x2="10" y2="12" />
+    <line x1="14" y1="12" x2="14" y2="12" />
+    <line x1="18" y1="12" x2="18" y2="12" />
+    <line x1="6" y1="16" x2="18" y2="16" />
+  </svg>
+);
+
+const PenDrawIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+    {/* 平板/触控板底座 */}
+    <path d="M2 14 L12 6 L22 14 L12 22 Z" />
+    <path d="M2 14 L2 16 L12 24 L22 16 L22 14" />
+    {/* 触控笔 */}
+    <path d="M14 4 L18 2 L20 6 L16 8 Z" fill="currentColor" opacity="0.2" />
+    <path d="M14 4 L18 2 L20 6 L16 8 Z" />
+    <line x1="16" y1="8" x2="12" y2="14" />
+    {/* 笔尖触点 */}
+    <circle cx="12" cy="14" r="1.5" fill="currentColor" />
+  </svg>
+);
+
+const MouseIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+    {/* 鼠标主体轮廓 */}
+    <rect x="6" y="3" width="12" height="18" rx="6" />
+    {/* 滚轮 */}
+    <line x1="12" y1="7" x2="12" y2="10" />
+    {/* 左右键分隔线 */}
+    <path d="M6 9 L18 9" />
+    {/* 鼠标线 */}
+    <path d="M12 3 Q12 0 14 0" />
+  </svg>
+);
+
 /* ---- helpers ---- */
 function statusDot(status: string | undefined) {
   if (status === 'running') return <span className="console-topbar__dot console-topbar__dot--running" />;
@@ -243,6 +285,13 @@ export function MachineConsolePage() {
   const terminateModal = usePresence(terminateConfirmOpen);
   const pathParam = searchParams.get('path') ?? undefined;
   const { isMobile, isPortrait } = useMobileDetect();
+  const viewportRef = useRef<NoVncViewportHandle>(null);
+  const hiddenInputRef = useRef<HTMLInputElement>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [inputMode, setInputMode] = useState<NoVncInputMode>('touch');
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSocketRef = useRef<WebSocket | null>(null);
+  const audioQueueTimeRef = useRef(0);
 
   const scaleOptions: Array<{ value: NoVncScaleMode; label: string }> = [
     { value: 'native', label: t('console.scaleNative') },
@@ -305,6 +354,7 @@ export function MachineConsolePage() {
   const hasError = status === 'stopped' && runtimeState?.lastError != null;
   const qemuAvailable = runtimeEnvironment?.available ?? false;
   const hasLiveConsole = status === 'running' && runtimeState?.displayBackend === 'vnc' && runtimeState?.displayWebSocketPort != null;
+  const isWebMode = typeof window !== 'undefined' && window.location.protocol !== 'file:';
 
   const displayHint = machine
     ? makeDisplayHint(machine)
@@ -326,6 +376,109 @@ export function MachineConsolePage() {
             : t('details.runtimeClipboardIdle')
       : t('details.runtimeClipboardDisabled')
     : t('details.runtimeClipboardDisabled');
+
+  useEffect(() => {
+    if (!isWebMode || !runtimeMachineId || !hasLiveConsole) {
+      if (audioSocketRef.current) {
+        audioSocketRef.current.close();
+        audioSocketRef.current = null;
+      }
+      if (audioContextRef.current) {
+        void audioContextRef.current.close().catch(() => undefined);
+        audioContextRef.current = null;
+      }
+      audioQueueTimeRef.current = 0;
+      return;
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const socket = new WebSocket(
+      `${protocol}//${window.location.host}/api/audio-ws?machineId=${encodeURIComponent(runtimeMachineId)}`
+    );
+    socket.binaryType = 'arraybuffer';
+    audioSocketRef.current = socket;
+
+    let disposed = false;
+    let sampleRate = 44100;
+    let channels = 2;
+
+    const ensureAudioContext = async () => {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContext();
+      }
+      if (audioContextRef.current.state === 'suspended') {
+        try {
+          await audioContextRef.current.resume();
+        } catch {
+          // Safari may still require a gesture. Keep the socket alive.
+        }
+      }
+      return audioContextRef.current;
+    };
+
+    socket.onmessage = async (event) => {
+      if (disposed) {
+        return;
+      }
+      if (typeof event.data === 'string') {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload?.type === 'audio-meta') {
+            sampleRate = Number(payload.sampleRate) || 44100;
+            channels = Number(payload.channels) || 2;
+          }
+        } catch {
+          // ignore malformed meta
+        }
+        return;
+      }
+
+      if (!(event.data instanceof ArrayBuffer)) {
+        return;
+      }
+
+      const audioContext = await ensureAudioContext();
+      if (!audioContext) {
+        return;
+      }
+
+      const pcm = new Int16Array(event.data);
+      if (pcm.length === 0) {
+        return;
+      }
+
+      const frameCount = Math.floor(pcm.length / channels);
+      if (frameCount <= 0) {
+        return;
+      }
+
+      const audioBuffer = audioContext.createBuffer(channels, frameCount, sampleRate);
+      for (let channelIndex = 0; channelIndex < channels; channelIndex += 1) {
+        const channelData = audioBuffer.getChannelData(channelIndex);
+        for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+          const sample = pcm[frameIndex * channels + channelIndex] || 0;
+          channelData[frameIndex] = Math.max(-1, Math.min(1, sample / 32768));
+        }
+      }
+
+      const source = audioContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(audioContext.destination);
+
+      const now = audioContext.currentTime;
+      const startAt = audioQueueTimeRef.current > now ? audioQueueTimeRef.current : now + 0.02;
+      source.start(startAt);
+      audioQueueTimeRef.current = startAt + audioBuffer.duration;
+    };
+
+    return () => {
+      disposed = true;
+      socket.close();
+      if (audioSocketRef.current === socket) {
+        audioSocketRef.current = null;
+      }
+    };
+  }, [hasLiveConsole, isWebMode, runtimeMachineId]);
 
   const handleStart = async () => {
     if (!machinePath) return;
@@ -495,6 +648,37 @@ export function MachineConsolePage() {
                     ))}
                   </div>
                 )}
+                {isMobile && (
+                  <div className="console-dropdown__section">
+                    <span className="console-dropdown__label">{t('console.inputMode')}</span>
+                    <button
+                      className={`console-dropdown__item ${inputMode === 'touch' ? 'console-dropdown__item--active' : ''}`}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setInputMode('touch');
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <span className="console-dropdown__check">{inputMode === 'touch' ? '●' : '○'}</span>
+                      <span className="console-dropdown__item-icon"><PenDrawIcon /></span>
+                      {t('console.touchMode')}
+                    </button>
+                    <button
+                      className={`console-dropdown__item ${inputMode === 'mouse' ? 'console-dropdown__item--active' : ''}`}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setInputMode('mouse');
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <span className="console-dropdown__check">{inputMode === 'mouse' ? '●' : '○'}</span>
+                      <span className="console-dropdown__item-icon"><MouseIcon /></span>
+                      {t('console.mouseMode')}
+                    </button>
+                  </div>
+                )}
                 <button
                   className="console-dropdown__item"
                   type="button"
@@ -636,12 +820,14 @@ export function MachineConsolePage() {
       <div className={`console-viewport ${isMobile ? 'console-viewport--mobile' : ''}`}>
         {hasLiveConsole ? (
           <NoVncViewport
+            ref={viewportRef}
             active
             machineRunning={status === 'running'}
             websocketPort={runtimeState.displayWebSocketPort}
             password={machine?.display.vnc?.password ?? ''}
             reconnectWindowMs={15000}
             scaleMode={scaleMode}
+            inputMode={inputMode}
           />
         ) : status === 'starting' ? (
           <div className="console-state">
@@ -713,6 +899,18 @@ export function MachineConsolePage() {
             <span className="console-mobile-toolbar__label">{t('console.reset')}</span>
           </button>
           <button
+            className={`console-mobile-toolbar__btn ${keyboardOpen ? 'console-mobile-toolbar__btn--active' : ''}`}
+            type="button"
+            onClick={() => {
+              setKeyboardOpen(true);
+              hiddenInputRef.current?.focus();
+            }}
+            title={t('console.keyboard')}
+          >
+            <KeyboardIcon />
+            <span className="console-mobile-toolbar__label">{t('console.keyboard')}</span>
+          </button>
+          <button
             className="console-mobile-toolbar__btn"
             type="button"
             onClick={() => setInfoOpen(true)}
@@ -731,6 +929,30 @@ export function MachineConsolePage() {
             <span className="console-mobile-toolbar__label">{t('console.more')}</span>
           </button>
         </div>
+      )}
+
+      {/* Hidden input for mobile keyboard */}
+      {isMobile && isPortrait && (
+        <input
+          ref={hiddenInputRef}
+          type="text"
+          className="console-hidden-input"
+          aria-hidden="true"
+          onBlur={() => setKeyboardOpen(false)}
+          onInput={(e) => {
+            const value = (e.target as HTMLInputElement).value;
+            if (value && viewportRef.current) {
+              viewportRef.current.sendText(value);
+              (e.target as HTMLInputElement).value = '';
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && viewportRef.current) {
+              viewportRef.current.sendText('\n');
+              e.preventDefault();
+            }
+          }}
+        />
       )}
 
       {/* Info drawer */}

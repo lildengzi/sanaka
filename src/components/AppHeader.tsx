@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import Sortable from 'sortablejs';
 import { machineRoute } from '../lib/routes';
 import { makeWorkspaceMachineItems, resolveWorkspaceSelection } from '../lib/machine';
 import { parseSakaContent } from '../lib/saka';
@@ -7,7 +8,8 @@ import { useAppStore } from '../store/AppStore';
 import { usePresence } from '../hooks/usePresence';
 import { useT } from '../hooks/useT';
 import { ExportMachineDialog } from './ExportMachineDialog';
-import type { WebModeState } from '../types/electron';
+import { ConnectVncDialog } from './ConnectVncDialog';
+import type { ExternalVncSession, WebModeState } from '../types/electron';
 import logoUrl from '../../assets/icons/fish.png';
 
 const SunIcon = () => (
@@ -102,8 +104,10 @@ export function AppHeader({ onLogoClick }: AppHeaderProps) {
     settings,
     setTheme,
     openAboutDialog,
+    openSakaByPath,
     renameMachine,
     duplicateMachine,
+    reorderRecents,
     setDeleteTarget,
     setStartError,
     highlightedMachinePath
@@ -125,6 +129,7 @@ export function AppHeader({ onLogoClick }: AppHeaderProps) {
     disks?: Array<{ id: string; name: string; path: string }>;
   } | null>(null);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [connectVncOpen, setConnectVncOpen] = useState(false);
   const [openingWebMode, setOpeningWebMode] = useState(false);
   const [stoppingWebMode, setStoppingWebMode] = useState(false);
   const [copyingWebModeUrl, setCopyingWebModeUrl] = useState(false);
@@ -132,6 +137,9 @@ export function AppHeader({ onLogoClick }: AppHeaderProps) {
   const [webModeState, setWebModeState] = useState<WebModeState | null>(null);
   const [showWebModeInfo, setShowWebModeInfo] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const machineListRef = useRef<HTMLDivElement>(null);
+  const sortableRef = useRef<Sortable | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const renameModal = usePresence(Boolean(renameTarget));
 
   useEffect(() => {
@@ -173,6 +181,38 @@ export function AppHeader({ onLogoClick }: AppHeaderProps) {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [moreMenuOpen]);
+
+  // Initialize Sortable for drag-and-drop
+  useEffect(() => {
+    if (!machineListRef.current || workspace.items.length === 0) {
+      return () => undefined;
+    }
+
+    sortableRef.current = Sortable.create(machineListRef.current, {
+      animation: 200,
+      delay: 500,
+      delayOnTouchOnly: true,
+      touchStartThreshold: 5,
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
+      onStart: () => {
+        setIsDragging(true);
+      },
+      onEnd: (evt) => {
+        setIsDragging(false);
+        if (evt.oldIndex !== evt.newIndex) {
+          const newOrder = sortableRef.current?.toArray() ?? [];
+          void reorderRecents(newOrder.filter(Boolean) as string[]);
+        }
+      }
+    });
+
+    return () => {
+      sortableRef.current?.destroy();
+      sortableRef.current = null;
+    };
+  }, [workspace.items.length, recents]);
 
   const navClass = (active: boolean, flash: boolean) => {
     const classNames = ['workspace-sidebar__item'];
@@ -335,6 +375,16 @@ export function AppHeader({ onLogoClick }: AppHeaderProps) {
     }
   };
 
+  const handleOpenConnectVnc = () => {
+    setMoreMenuOpen(false);
+    setConnectVncOpen(true);
+  };
+
+  const handleVncConnected = (session: ExternalVncSession, password: string) => {
+    setConnectVncOpen(false);
+    navigate(`/viewer/vnc/${encodeURIComponent(session.id)}`, { state: { password } });
+  };
+
   const handleOpenWebModeInBrowser = async () => {
     if (!webModeState?.url) {
       return;
@@ -454,19 +504,35 @@ export function AppHeader({ onLogoClick }: AppHeaderProps) {
 
         <div className="workspace-sidebar__section workspace-sidebar__section--machines">
           <div className="workspace-sidebar__label">{t('home.recentMachines')}</div>
-          <nav className="workspace-sidebar__list" aria-label={t('home.recentMachines')}>
+          <nav ref={machineListRef} className="workspace-sidebar__list" aria-label={t('home.recentMachines')}>
             {workspace.items.length === 0 ? (
               <div className="workspace-sidebar__empty">{t('home.sidebarEmpty')}</div>
             ) : (
               workspace.items.map((item) => (
                 <button
                   key={`${item.id}:${item.path ?? item.source}`}
-                  className={navClass(workspace.primary?.id === item.id && workspace.primary?.path === item.path, Boolean(item.path && item.path === highlightedMachinePath)) + (item.missing ? ' workspace-sidebar__item--missing' : '')}
+                  data-id={item.path ?? item.id}
+                  className={navClass(
+                    workspace.primary?.id === item.id && workspace.primary?.path === item.path,
+                    Boolean(item.path && item.path === highlightedMachinePath)
+                  ) + (item.missing ? ' workspace-sidebar__item--missing' : '') + (isDragging ? ' workspace-sidebar__item--dragging' : '')}
                   type="button"
                   aria-label={item.title}
                   title={item.missing ? t('home.machineMissing') : item.title}
                   disabled={item.missing}
-                  onClick={() => !item.missing && navigate(item.path ? machineRoute(item.id, item.path) : item.source === 'draft' ? '/machines/new' : '/')}
+                  onClick={() => {
+                    if (!item.missing && !isDragging) {
+                      if (item.path) {
+                        void openSakaByPath(item.path, { refreshRecents: false }).then((result) => {
+                          if (result) {
+                            navigate(machineRoute(result.machineId, result.path));
+                          }
+                        });
+                        return;
+                      }
+                      navigate(item.source === 'draft' ? '/machines/new' : '/');
+                    }
+                  }}
                   onContextMenu={(e) => !item.missing && handleContextMenu(e, item)}
                 >
                   <span className={`workspace-sidebar__icon workspace-sidebar__icon--machine${item.missing ? ' workspace-sidebar__icon--missing' : ''}`}>
@@ -536,6 +602,14 @@ export function AppHeader({ onLogoClick }: AppHeaderProps) {
                   onClick={() => void handleOpenWebMode()}
                 >
                   {openingWebMode ? t('app.openingWebMode') : t('app.openWebMode')}
+                </button>
+                <button
+                  className="sidebar-more-menu__item"
+                  type="button"
+                  role="menuitem"
+                  onClick={handleOpenConnectVnc}
+                >
+                  {t('app.connectVnc')}
                 </button>
                 <button
                   className="sidebar-more-menu__item"
@@ -789,6 +863,12 @@ export function AppHeader({ onLogoClick }: AppHeaderProps) {
           machine={exportMachine}
         />
       )}
+
+      <ConnectVncDialog
+        open={connectVncOpen}
+        onClose={() => setConnectVncOpen(false)}
+        onConnected={handleVncConnected}
+      />
     </>
   );
 }

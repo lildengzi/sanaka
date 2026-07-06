@@ -50,6 +50,24 @@ function tokenizeUserArgs(input) {
   return tokens;
 }
 
+function splitAdvancedUserArgs(tokens) {
+  const passthroughArgs = [];
+  const userNetdevExtras = [];
+
+  for (const token of tokens) {
+    if (typeof token === 'string' && (token.startsWith('hostfwd=') || token.startsWith('guestfwd='))) {
+      userNetdevExtras.push(token);
+      continue;
+    }
+    passthroughArgs.push(token);
+  }
+
+  return {
+    passthroughArgs,
+    userNetdevExtras
+  };
+}
+
 function guestFamily(guestArch) {
   if (guestArch === 'x86_64' || guestArch === 'i386') {
     return 'x86';
@@ -116,6 +134,17 @@ function mapBootOrder(bootOrder) {
   if (bootOrder === 'disk') return 'c';
   if (bootOrder === 'floppy') return 'a';
   return null;
+}
+
+function normalizeQemuFilePath(filePath, hostPlatform) {
+  const value = String(filePath || '');
+  if (!value) {
+    return '';
+  }
+  if (hostPlatform === 'win32') {
+    return value.replace(/\\/g, '/');
+  }
+  return value;
 }
 
 function mapAudioDevice(machine, audioBackend, hostPlatform) {
@@ -521,19 +550,19 @@ class QemuCommandBuilder {
         runtimePaths.runtimeDir,
         machine.advanced?.firmware
       );
-      args.push('-drive', `if=pflash,format=raw,readonly=on,file=${firmware.codePath}`);
+      args.push('-drive', `if=pflash,format=raw,readonly=on,file=${normalizeQemuFilePath(firmware.codePath, host.platform)}`);
       if (firmware.varsPath) {
-        args.push('-drive', `if=pflash,format=raw,file=${firmware.varsPath}`);
+        args.push('-drive', `if=pflash,format=raw,file=${normalizeQemuFilePath(firmware.varsPath, host.platform)}`);
       }
     }
 
     args.push(...buildDisplayArgs(guestArch, machine.display.gpu));
 
     const cdromAttachment = resolveCdromAttachment(guestArch, machineType);
-    args.push('-drive', `if=none,id=cd0,media=cdrom,readonly=on,file=${machine.media?.iso || ''}`);
+    args.push('-drive', `if=none,id=cd0,media=cdrom,readonly=on,file=${normalizeQemuFilePath(machine.media?.iso || '', host.platform)}`);
 
     if (machine.media?.floppy) {
-      args.push('-drive', `if=none,id=floppy0,media=disk,format=raw,file=${machine.media.floppy}`);
+      args.push('-drive', `if=none,id=floppy0,media=disk,format=raw,file=${normalizeQemuFilePath(machine.media.floppy, host.platform)}`);
       args.push('-device', 'floppy,id=floppy-device0,drive=floppy0');
     }
 
@@ -562,13 +591,25 @@ class QemuCommandBuilder {
 
     (machine.disks || []).forEach((disk, index) => {
       const driveId = `drive${index}`;
-      const driveArgs = [`file=${disk.path}`, `format=${disk.format || 'qcow2'}`, `id=${driveId}`, 'if=none'];
+      const driveArgs = [`file=${normalizeQemuFilePath(disk.path, host.platform)}`, `format=${disk.format || 'qcow2'}`, `id=${driveId}`, 'if=none'];
       if (disk.readonly) {
         driveArgs.push('readonly=on');
       }
       args.push('-drive', driveArgs.join(','));
       args.push('-device', diskAttachments[index].device);
     });
+
+    const tokenizedUserArgs = tokenizeUserArgs(machine.advanced?.qemu_args || '');
+    const { passthroughArgs, userNetdevExtras } = splitAdvancedUserArgs(tokenizedUserArgs);
+
+    if (userNetdevExtras.length > 0) {
+      if (!machine.network?.enabled) {
+        throw new Error('hostfwd/guestfwd requires Sanaka machine networking to be enabled.');
+      }
+      if (machine.network.mode !== 'user') {
+        throw new Error('hostfwd/guestfwd is only supported with User networking.');
+      }
+    }
 
     if (machine.network?.enabled) {
       if (!machine.network.card || machine.network.card === 'none') {
@@ -582,6 +623,9 @@ class QemuCommandBuilder {
         machine.network.mode === 'bridge'
           ? ['bridge,id=net0']
           : ['user,id=net0'];
+      if (machine.network.mode === 'user' && userNetdevExtras.length > 0) {
+        netdevParts.push(...userNetdevExtras);
+      }
       const netdev = netdevParts.join(',');
       const machineMac = deriveStableMacAddress(machine.id);
       args.push('-netdev', netdev, '-device', `${machine.network.card},netdev=net0,mac=${machineMac}`);
@@ -598,8 +642,7 @@ class QemuCommandBuilder {
       `127.0.0.1:${displayConfig.displayNumber},websocket=${displayConfig.websocketPort}`
     );
 
-    const userArgs = tokenizeUserArgs(machine.advanced?.qemu_args || '');
-    args.push(...userArgs);
+    args.push(...passthroughArgs);
 
     return {
       binaryPath: binary.path,
@@ -622,5 +665,7 @@ module.exports = {
   tokenizeUserArgs,
   buildDisplayArgs,
   resolveUefiFirmware,
-  deriveStableMacAddress
+  splitAdvancedUserArgs,
+  deriveStableMacAddress,
+  normalizeQemuFilePath
 };

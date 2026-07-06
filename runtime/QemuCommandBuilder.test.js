@@ -422,6 +422,102 @@ describe('QemuCommandBuilder machine types', () => {
     expect(result.args[accelIndex + 1]).toBe('tcg,thread=multi');
   });
 
+  it('merges hostfwd advanced args into the generated user netdev instead of appending a broken standalone token', () => {
+    const builder = new QemuCommandBuilder();
+    const result = builder.build({
+      machine: {
+        id: 'debian-port-forward',
+        title: 'Debian',
+        system: {
+          arch: 'x86_64',
+          machine_type: 'pc-q35-9.2',
+          accelerator: 'tcg',
+          boot_order: 'disk',
+          memory_mib: 2048,
+          cpu_cores: 2,
+          sound_card: 'intel-hda',
+          uefi: false
+        },
+        media: { iso: '', floppy: '' },
+        disks: [],
+        network: { enabled: true, mode: 'user', card: 'rtl8139' },
+        display: { frontend: 'sanaka', gpu: 'std', sanaka: { backend: 'vnc', scale_mode: 'fit', clipboard: true } },
+        peripherals: { usb_tablet: true },
+        advanced: { audio_backend: 'auto', qemu_args: 'hostfwd=tcp::5555-:22' }
+      },
+      environment: {
+        binaries: {
+          x86_64: { found: true, path: '/usr/bin/qemu-system-x86_64' }
+        },
+        accelerators: ['tcg']
+      },
+      runtimePaths: {
+        qmp: { transport: 'tcp', host: '127.0.0.1', port: 47001 }
+      },
+      displayConfig: {
+        port: 5901,
+        websocketPort: 5701,
+        displayNumber: 1
+      },
+      host: {
+        platform: 'win32',
+        arch: 'x64'
+      }
+    });
+
+    const netdevIndex = result.args.indexOf('-netdev');
+    expect(netdevIndex).toBeGreaterThan(-1);
+    expect(result.args[netdevIndex + 1]).toContain('user,id=net0,hostfwd=tcp::5555-:22');
+    expect(result.args).not.toContain('hostfwd=tcp::5555-:22');
+  });
+
+  it('rejects hostfwd advanced args when machine networking is disabled', () => {
+    const builder = new QemuCommandBuilder();
+
+    expect(() =>
+      builder.build({
+        machine: {
+          id: 'debian-no-network',
+          title: 'Debian',
+          system: {
+            arch: 'x86_64',
+            machine_type: 'pc-q35-9.2',
+            accelerator: 'tcg',
+            boot_order: 'disk',
+            memory_mib: 2048,
+            cpu_cores: 2,
+            sound_card: 'intel-hda',
+            uefi: false
+          },
+          media: { iso: '', floppy: '' },
+          disks: [],
+          network: { enabled: false, mode: 'user', card: 'rtl8139' },
+          display: { frontend: 'sanaka', gpu: 'std', sanaka: { backend: 'vnc', scale_mode: 'fit', clipboard: true } },
+          peripherals: { usb_tablet: true },
+          advanced: { audio_backend: 'auto', qemu_args: 'hostfwd=tcp::5555-:22' }
+        },
+        environment: {
+          binaries: {
+            x86_64: { found: true, path: '/usr/bin/qemu-system-x86_64' }
+          },
+          accelerators: ['tcg']
+        },
+        runtimePaths: {
+          qmp: { transport: 'tcp', host: '127.0.0.1', port: 47001 }
+        },
+        displayConfig: {
+          port: 5901,
+          websocketPort: 5701,
+          displayNumber: 1
+        },
+        host: {
+          platform: 'win32',
+          arch: 'x64'
+        }
+      })
+    ).toThrow('hostfwd/guestfwd requires Sanaka machine networking to be enabled.');
+  });
+
   it('maps q35 cdroms through AHCI instead of assuming a legacy IDE bus', () => {
     const builder = new QemuCommandBuilder();
     const result = builder.build({
@@ -851,6 +947,65 @@ describe('QemuCommandBuilder machine types', () => {
     });
 
     expect(result.args).toContain(`if=pflash,format=raw,readonly=on,file=${path.join(shareDir, 'edk2-x86_64-code.fd')}`);
+  });
+
+  it('normalizes Windows file paths before embedding them into -drive suboptions', () => {
+    const builder = new QemuCommandBuilder();
+    const result = builder.build({
+      machine: {
+        id: 'windows-paths',
+        title: 'Windows Paths',
+        system: {
+          arch: 'x86_64',
+          machine_type: 'q35',
+          accelerator: 'tcg',
+          boot_order: 'disk',
+          memory_mib: 2048,
+          cpu_cores: 2,
+          sound_card: 'intel-hda',
+          uefi: false
+        },
+        media: {
+          iso: 'D:\\镜像\\CentOS-7-x86_64-DVD-2009.iso',
+          floppy: 'A:\\工具\\boot.img'
+        },
+        disks: [
+          {
+            id: 'disk0',
+            path: 'C:\\Downloads\\小叉屁\\xp.qcow2',
+            format: 'qcow2',
+            interface: 'virtio',
+            readonly: false
+          }
+        ],
+        network: { enabled: false, mode: 'user', card: 'rtl8139' },
+        display: { frontend: 'sanaka', gpu: 'std', sanaka: { backend: 'vnc', scale_mode: 'fit', clipboard: true } },
+        peripherals: { usb_tablet: true },
+        advanced: { audio_backend: 'auto', qemu_args: '' }
+      },
+      environment: {
+        binaries: {
+          x86_64: { found: true, path: 'C:\\Program Files\\qemu\\qemu-system-x86_64.EXE' }
+        },
+        accelerators: ['tcg']
+      },
+      runtimePaths: {
+        qmp: { transport: 'tcp', host: '127.0.0.1', port: 47001 }
+      },
+      displayConfig: {
+        port: 5901,
+        websocketPort: 5701,
+        displayNumber: 1
+      },
+      host: {
+        platform: 'win32',
+        arch: 'x64'
+      }
+    });
+
+    expect(result.args).toContain('if=none,id=cd0,media=cdrom,readonly=on,file=D:/镜像/CentOS-7-x86_64-DVD-2009.iso');
+    expect(result.args).toContain('if=none,id=floppy0,media=disk,format=raw,file=A:/工具/boot.img');
+    expect(result.args).toContain('file=C:/Downloads/小叉屁/xp.qcow2,format=qcow2,id=drive0,if=none');
   });
 
   it('supports custom third-party pflash CODE and VARS files for aarch64 UEFI', () => {

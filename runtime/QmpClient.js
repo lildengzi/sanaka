@@ -181,6 +181,12 @@ class QmpClient extends EventEmitter {
     });
   }
 
+  humanMonitorCommand(commandLine) {
+    return this.execute('human-monitor-command', {
+      'command-line': commandLine
+    });
+  }
+
   close() {
     if (this.socket) {
       this.socket.removeAllListeners();

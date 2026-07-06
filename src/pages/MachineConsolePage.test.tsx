@@ -86,7 +86,8 @@ describe('MachineConsolePage', () => {
       recents: {
         list: vi.fn(async () => []),
         push: vi.fn(async (entry) => [entry]),
-        remove: vi.fn(async () => [])
+        remove: vi.fn(async () => []),
+        reorder: vi.fn(async (paths) => paths)
       },
       runtime: {
         detectQemu: vi.fn(async () => createRuntimeEnvironment()),
@@ -225,7 +226,8 @@ describe('MachineConsolePage', () => {
       recents: {
         list: vi.fn(async () => []),
         push: vi.fn(async (entry) => [entry]),
-        remove: vi.fn(async () => [])
+        remove: vi.fn(async () => []),
+        reorder: vi.fn(async (paths) => paths)
       },
       runtime: {
         detectQemu: vi.fn(async () => createRuntimeEnvironment()),

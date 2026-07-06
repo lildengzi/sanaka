@@ -78,7 +78,8 @@ function mockElectronApi() {
     recents: {
       list: vi.fn(async () => []),
       push: vi.fn(async (entry) => [entry]),
-      remove: vi.fn(async () => [])
+      remove: vi.fn(async () => []),
+      reorder: vi.fn(async (paths) => paths)
     },
     runtime: {
       detectQemu: vi.fn(async () => runtimeEnvironment),
@@ -133,7 +134,7 @@ function mockElectronApi() {
 }
 
 function StoreHarness() {
-  const { ready, draft, openSakaByPath, updateDraft, startMachine, importTemplateFromDialog, activity } = useAppStore();
+  const { ready, draft, openSakaByPath, recents, updateDraft, startMachine, importTemplateFromDialog, activity } = useAppStore();
 
   if (!ready) {
     return <div>loading</div>;
@@ -143,6 +144,9 @@ function StoreHarness() {
     <div>
       <button type="button" onClick={() => void openSakaByPath(machinePath)}>
         open
+      </button>
+      <button type="button" onClick={() => void openSakaByPath(machinePath, { refreshRecents: false })}>
+        open-no-recent-refresh
       </button>
       <button
         type="button"
@@ -166,6 +170,7 @@ function StoreHarness() {
         import-template
       </button>
       <div>{activity[0]?.title ?? ''}</div>
+      <div data-testid="recent-titles">{recents.map((item) => item.title).join('|')}</div>
     </div>
   );
 }
@@ -221,5 +226,47 @@ describe('AppStore startMachine', () => {
     await user.click(await screen.findByRole('button', { name: 'import-template' }));
 
     await screen.findByText('导入失败');
+  });
+
+  it('can open a machine without moving it to the top of recents', async () => {
+    mockElectronApi();
+    window.electronAPI.recents.list = vi.fn(async () => [
+      {
+        id: 'other-machine',
+        title: 'Other Machine',
+        path: '/tmp/other-machine.saka',
+        kind: 'machine',
+        templateLabel: 'Windows 10',
+        updatedAt: '2026-06-12T01:00:00.000Z',
+        status: 'saved'
+      },
+      {
+        id: 'machine-1',
+        title: 'Windows Dev Box',
+        path: machinePath,
+        kind: 'machine',
+        templateLabel: 'Windows 10',
+        updatedAt: '2026-06-12T00:00:00.000Z',
+        status: 'saved'
+      }
+    ]);
+
+    const pushSpy = vi.fn(async (entry) => [entry]);
+    window.electronAPI.recents.push = pushSpy;
+
+    const user = userEvent.setup();
+
+    render(
+      <AppStoreProvider>
+        <StoreHarness />
+      </AppStoreProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'open-no-recent-refresh' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('recent-titles').textContent).toBe('Other Machine|Windows Dev Box');
+    });
+    expect(pushSpy).not.toHaveBeenCalled();
   });
 });

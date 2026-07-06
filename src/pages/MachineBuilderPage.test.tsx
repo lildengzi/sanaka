@@ -68,11 +68,47 @@ function mockElectronApi() {
     recents: {
       list: vi.fn(async () => []),
       push: vi.fn(async (entry) => [entry]),
-      remove: vi.fn(async () => [])
+      remove: vi.fn(async () => []),
+      reorder: vi.fn(async (paths) => paths)
     },
     runtime: {
       detectQemu: vi.fn(async () => runtimeEnvironment),
       getRuntimeEnvironment: vi.fn(async () => runtimeEnvironment),
+      buildQemuArgList: vi.fn(async (machine) => ({
+        args: [
+          { id: 'controlled:system.memory_mib', raw: `-m ${machine.system.memory_mib}`, source: 'controlled' as const, bindingKey: 'system.memory_mib' as const, editable: true },
+          { id: 'controlled:system.cpu_cores', raw: `-smp ${machine.system.cpu_cores}`, source: 'controlled' as const, bindingKey: 'system.cpu_cores' as const, editable: true }
+        ]
+      })),
+      applyControlledQemuArgEdit: vi.fn(async ({ machine, bindingKey, raw }) => {
+        if (bindingKey === 'system.memory_mib') {
+          const value = Number(String(raw).split(' ')[1]);
+          return {
+            ok: true,
+            machine: { ...machine, system: { ...machine.system, memory_mib: value } },
+            args: [
+              { id: 'controlled:system.memory_mib', raw: `-m ${value}`, source: 'controlled' as const, bindingKey: 'system.memory_mib' as const, editable: true },
+              { id: 'controlled:system.cpu_cores', raw: `-smp ${machine.system.cpu_cores}`, source: 'controlled' as const, bindingKey: 'system.cpu_cores' as const, editable: true }
+            ]
+          };
+        }
+        return { ok: false, error: 'Invalid controlled QEMU argument value.' };
+      }),
+      normalizeCustomQemuArgs: vi.fn(async ({ machine, customArgs }) => ({
+        ok: true,
+        machine: {
+          ...machine,
+          advanced: {
+            ...machine.advanced,
+            qemu_args: customArgs.join('\n')
+          }
+        },
+        args: [
+          { id: 'controlled:system.memory_mib', raw: `-m ${machine.system.memory_mib}`, source: 'controlled' as const, bindingKey: 'system.memory_mib' as const, editable: true },
+          { id: 'controlled:system.cpu_cores', raw: `-smp ${machine.system.cpu_cores}`, source: 'controlled' as const, bindingKey: 'system.cpu_cores' as const, editable: true },
+          ...customArgs.map((raw: string, index: number) => ({ id: `custom:${index}`, raw, source: 'custom' as const, editable: true }))
+        ]
+      })),
       previewMachineCommand: vi.fn(async () => ({
         machineId: 'machine-1',
         bundlePath: '/tmp/example.saka',

@@ -207,7 +207,6 @@ button {
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
   height: 38px;
   background: transparent;
   -webkit-app-region: drag;
@@ -215,7 +214,15 @@ button {
   z-index: 9999;
 }
 
-body.platform-darwin .app-dragbar {
+.app-dragbar--full {
+  right: 0;
+}
+
+.app-dragbar--sidebar {
+  width: clamp(260px, 24vw, 340px);
+}
+
+body.platform-darwin .app-shell--desktop .app-dragbar {
   display: block;
 }
 
@@ -537,6 +544,29 @@ body.platform-darwin .app-dragbar {
 .workspace-sidebar__item--missing .workspace-sidebar__item-copy--missing strong,
 .workspace-sidebar__item--missing .workspace-sidebar__item-copy--missing small {
   color: var(--muted);
+}
+
+/* Sortable drag and drop styles */
+.workspace-sidebar__item--dragging {
+  cursor: grabbing;
+}
+
+.sortable-ghost {
+  opacity: 0.4;
+  background: var(--panel-muted) !important;
+  border: 2px dashed var(--primary-strong) !important;
+}
+
+.sortable-chosen {
+  background: var(--panel-soft) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sortable-drag {
+  opacity: 0.95;
+  background: var(--panel) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  transform: scale(1.02);
 }
 
 @keyframes sidebar-item-flash {
@@ -906,6 +936,14 @@ body.platform-darwin .app-dragbar {
 
 .machine-visual__play-btn:active {
   transform: translateY(0);
+}
+
+.machine-visual__play-btn--overlay {
+  position: absolute;
+  inset: auto;
+  z-index: 2;
+  background: rgba(146, 121, 200, 0.88);
+  backdrop-filter: blur(10px);
 }
 
 .workspace-focus__summary {
@@ -1923,6 +1961,10 @@ textarea:focus {
     default;
 }
 
+.novnc-viewport__mount--mouse {
+  cursor: none;
+}
+
 .novnc-viewport__mount canvas {
   display: block;
   cursor: inherit !important;
@@ -1949,6 +1991,59 @@ textarea:focus {
   z-index: 2;
 }
 
+.novnc-viewport__gesture-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.novnc-viewport__gesture-layer--active {
+  pointer-events: auto;
+}
+
+.novnc-viewport__cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  margin-top: -4.5px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 255, 255, 0.96);
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.95), rgba(214, 222, 255, 0.58) 42%, rgba(98, 118, 166, 0.14) 100%);
+  box-shadow:
+    0 0 0 1px rgba(8, 9, 14, 0.42),
+    0 10px 28px rgba(0, 0, 0, 0.34);
+  opacity: 0;
+  transform: translate(-9999px, -9999px);
+  transition:
+    opacity 140ms ease,
+    width 120ms ease,
+    height 120ms ease,
+    margin-left 120ms ease,
+    margin-top 120ms ease,
+    box-shadow 120ms ease;
+  will-change: transform;
+}
+
+.novnc-viewport__cursor--visible {
+  opacity: 1;
+}
+
+.novnc-viewport__cursor--dragging {
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  margin-top: -6px;
+  box-shadow:
+    0 0 0 1px rgba(8, 9, 14, 0.58),
+    0 14px 34px rgba(0, 0, 0, 0.38);
+}
+
 .novnc-viewport__status {
   text-transform: capitalize;
 }
@@ -1956,6 +2051,7 @@ textarea:focus {
 .novnc-viewport__error {
   color: rgba(255, 209, 209, 0.88);
 }
+
 
 /* ============================================
    Console Fullscreen Layout (noVNC + topbar)
@@ -2141,15 +2237,15 @@ textarea:focus {
   margin-top: 46px;
 }
 
-body.platform-darwin .console-topbar {
+body.platform-darwin .app-shell--desktop .console-topbar {
   top: 38px;
 }
 
-body.platform-darwin .console-topbar__left {
+body.platform-darwin .app-shell--desktop .console-topbar__left {
   padding-left: 78px;
 }
 
-body.platform-darwin .page--console .console-viewport {
+body.platform-darwin .app-shell--desktop .page--console .console-viewport {
   margin-top: 84px;
 }
 
@@ -2458,6 +2554,17 @@ body.platform-darwin .page--console .console-viewport {
   display: none;
 }
 
+.console-hidden-input {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
 @media (max-width: 760px) and (orientation: portrait) {
   .console-mobile-toolbar {
     display: flex;
@@ -2514,6 +2621,15 @@ body.platform-darwin .page--console .console-viewport {
     font-weight: 500;
     color: rgba(245, 241, 255, 0.6);
   }
+
+  .console-mobile-toolbar__btn--active {
+    color: var(--primary);
+    background: rgba(205, 186, 242, 0.15);
+  }
+
+  .console-hidden-input {
+    display: block;
+  }
 }
 
 /* 移动端下拉菜单增强 */
@@ -2540,6 +2656,21 @@ body.platform-darwin .page--console .console-viewport {
     margin-right: 8px;
     font-size: 0.8rem;
     color: var(--primary);
+  }
+
+  .console-dropdown__item-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin-right: 8px;
+    color: currentColor;
+  }
+
+  .console-dropdown__item-icon svg {
+    width: 16px;
+    height: 16px;
   }
 
   .console-dropdown__item--active {
@@ -2578,6 +2709,314 @@ body.platform-darwin .page--console .console-viewport {
 .status-inline {
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+/* ============================================
+   Machine Details Page - 8px Grid System
+   ============================================ */
+
+/* 主容器 - 居中布局 */
+.details-container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* 预览图区域 */
+.details-preview-section {
+  display: flex;
+  justify-content: center;
+}
+
+.details-preview {
+  width: 100%;
+  max-width: 480px;
+  aspect-ratio: 16 / 10;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.details-preview__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 标题区域 */
+.details-header-section {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.details-header-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.details-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 8px 0;
+  line-height: 1.3;
+}
+
+.details-subtitle {
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.details-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* 编辑按钮 - 笔形图标 */
+.details-edit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: var(--panel-muted);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.details-edit-btn:hover {
+  background: var(--line);
+  color: var(--text);
+}
+
+.details-edit-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 操作按钮区域 */
+.details-actions-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.details-actions-row {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+  justify-content: center;
+}
+
+.details-actions-row .button {
+  min-width: 140px;
+  padding: 12px 24px;
+}
+
+/* 编辑链接 - 次要入口 */
+.details-edit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+
+.details-edit-link:hover {
+  color: var(--primary);
+}
+
+.details-edit-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 区块标题 */
+.details-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 12px 0;
+}
+
+/* 配置信息区域 */
+.details-config-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.details-config-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* 配置信息项 */
+.details-config-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  min-height: 56px;
+  border-bottom: 1px solid var(--line);
+  transition: background 160ms ease;
+}
+
+.details-config-item:last-child {
+  border-bottom: none;
+}
+
+.details-config-item:hover {
+  background: var(--panel-soft);
+}
+
+.details-config-item__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.details-config-item__icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.details-config-item__label {
+  width: 80px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.details-config-item__value {
+  flex: 1;
+  font-size: 0.9rem;
+  color: var(--text);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 危险操作区域 */
+.details-danger-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.details-danger-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.details-danger-info strong {
+  display: block;
+  font-size: 0.95rem;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.details-danger-info p {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* 状态标签优化 */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(205, 186, 242, 0.2);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.status-chip--accent {
+  background: rgba(205, 186, 242, 0.35);
+}
+
+.status-chip--success {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+}
+
+.status-chip--warning {
+  background: rgba(255, 152, 0, 0.15);
+  color: #ff9800;
+}
+
+/* 深色模式适配 */
+html[data-theme="dark"] .status-chip--success {
+  background: rgba(76, 175, 80, 0.2);
+  color: #81c784;
+}
+
+html[data-theme="dark"] .status-chip--warning {
+  background: rgba(255, 152, 0, 0.2);
+  color: #ffb74d;
+}
+
+/* 响应式适配 */
+@media (max-width: 640px) {
+  .details-container {
+    padding: 16px;
+    gap: 24px;
+  }
+
+  .details-title {
+    font-size: 1.25rem;
+  }
+
+  .details-actions-row {
+    flex-direction: column;
+  }
+
+  .details-actions-row .button {
+    width: 100%;
+  }
+
+  .details-config-item__label {
+    width: 60px;
+    font-size: 0.8rem;
+  }
+
+  .details-config-item__value {
+    font-size: 0.85rem;
+  }
 }
 
 .status-inline--stack {
@@ -3626,16 +4065,12 @@ body.platform-darwin {
 body.platform-darwin #root {
   background: transparent !important;
 }
-body.platform-darwin .app-shell {
+body.platform-darwin .app-shell--desktop,
+body.platform-darwin .app-shell--desktop .app-shell__window,
+body.platform-darwin .app-shell--desktop .app-shell__surface {
   background: transparent !important;
 }
-body.platform-darwin .app-shell__window {
-  background: transparent !important;
-}
-body.platform-darwin .app-shell__surface {
-  background: transparent !important;
-}
-body.platform-darwin .app-sidebar {
+body.platform-darwin .app-shell--desktop .app-sidebar {
   background: rgba(255, 255, 255, 0.0025) !important;
   backdrop-filter: blur(5px);
   -webkit-backdrop-filter: blur(5px);
@@ -3643,12 +4078,19 @@ body.platform-darwin .app-sidebar {
   box-shadow: none !important;
 }
 
-html[data-theme="dark"] body.platform-darwin .app-sidebar {
-  background: var(--sidebar-surface) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+html[data-theme="dark"] body.platform-darwin .app-shell--desktop .app-sidebar {
+  background: rgba(20, 16, 32, 0.72) !important;
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
-body.platform-darwin .app-shell__content {
+
+/* Windows / Linux 降级毛玻璃效果 */
+body:not(.platform-darwin) .app-shell--desktop .app-sidebar {
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+body.platform-darwin .app-shell--desktop .app-shell__content {
   background: var(--bg) !important;
 }
 
@@ -6142,15 +6584,38 @@ html[data-theme="dark"] .context-menu {
   gap: 6px;
   padding: 6px;
   margin-bottom: 10px;
-  background: var(--panel-muted);
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(247, 240, 255, 0.62)),
+    rgba(255, 255, 255, 0.32);
+  border: 1px solid rgba(214, 201, 233, 0.72);
   border-radius: 999px;
-  box-shadow: 0 2px 8px rgba(54, 42, 73, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 -1px 0 rgba(199, 182, 226, 0.34),
+    0 10px 24px rgba(54, 42, 73, 0.12);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+.sidebar-theme-toggle::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.62), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 58%);
+  pointer-events: none;
 }
 
 .sidebar-theme-toggle__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  z-index: 1;
   width: 32px;
   height: 32px;
   border: none;
@@ -6167,16 +6632,20 @@ html[data-theme="dark"] .context-menu {
 }
 
 .sidebar-theme-toggle__btn--active {
-  background: var(--panel);
+  background: rgba(255, 255, 255, 0.86);
   color: var(--text);
-  box-shadow: var(--shadow-soft);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    0 6px 14px rgba(82, 64, 112, 0.12);
 }
 
 .sidebar-theme-divider {
   width: 1px;
   height: 20px;
-  background: var(--line);
+  background: linear-gradient(180deg, rgba(168, 149, 198, 0), rgba(168, 149, 198, 0.7), rgba(168, 149, 198, 0));
   margin: 0 4px;
+  position: relative;
+  z-index: 1;
 }
 
 /* Sidebar footer tools container */
@@ -6186,6 +6655,8 @@ html[data-theme="dark"] .context-menu {
   justify-content: center;
   margin-bottom: 10px;
   position: relative;
+  padding: 2px;
+  border-radius: 999px;
 }
 
 .sidebar-footer-tools .sidebar-theme-toggle {
@@ -6225,6 +6696,23 @@ html[data-theme="dark"] .sidebar-more-menu__dropdown {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
 }
 
+html[data-theme="dark"] .sidebar-theme-toggle {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--panel-muted);
+  border-color: rgba(74, 66, 96, 0.7);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+}
+
+html[data-theme="dark"] .sidebar-theme-toggle::before {
+  display: none;
+}
+
+html[data-theme="dark"] .sidebar-theme-toggle__btn--active {
+  background: var(--surface-card-strong);
+  box-shadow: var(--shadow-soft);
+}
+
 .sidebar-more-menu__item {
   display: flex;
   align-items: center;
@@ -6261,7 +6749,7 @@ html[data-theme="dark"] .sidebar-more-menu__dropdown {
   color: var(--danger);
 }
 
-body.platform-darwin .app-shell__top-tools {
+body.platform-darwin .app-shell--desktop .app-shell__top-tools {
   top: 22px;
 }
 
@@ -6305,4 +6793,192 @@ body.platform-darwin .app-shell__top-tools {
   border-radius: 10px;
   background: var(--code-surface);
   color: var(--text);
+}
+
+/* --- Connect VNC dialog --- */
+.connect-vnc-dialog {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.connect-vnc-dialog__error {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(169, 58, 85, 0.28);
+  background: rgba(169, 58, 85, 0.08);
+  color: var(--danger);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+/* --- QEMU args list --- */
+.qemu-args-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.qemu-args-list__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.qemu-args-list__title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.qemu-args-list__add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.qemu-args-list__add-btn:hover {
+  background: var(--primary-soft);
+  border-color: var(--primary-soft);
+  color: var(--primary-strong);
+}
+
+.qemu-args-list__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qemu-args-list__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
+  min-height: 40px;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.qemu-args-list__row--controlled {
+  border-left: 3px solid var(--primary);
+}
+
+.qemu-args-list__row--custom {
+  border-left: 3px solid transparent;
+}
+
+.qemu-args-list__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.qemu-args-list__binding {
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--muted);
+  flex-shrink: 0;
+  min-width: 56px;
+}
+
+.qemu-args-list__raw {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  color: var(--text);
+  word-break: break-all;
+  cursor: text;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.qemu-args-list__raw:hover {
+  background: var(--panel-muted);
+}
+
+.qemu-args-list__raw:focus {
+  outline: 2px solid var(--primary-soft);
+  background: var(--panel-muted);
+}
+
+.qemu-args-list__input {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  padding: 4px 8px;
+  min-width: 0;
+}
+
+.qemu-args-list__input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+
+.qemu-args-list__remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.qemu-args-list__remove-btn:hover {
+  background: rgba(169, 58, 85, 0.08);
+  color: var(--danger);
+}
+
+.qemu-args-list__error {
+  font-size: 0.8rem;
+  color: var(--danger);
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(169, 58, 85, 0.08);
+}
+
+/* --- External VNC Viewer page --- */
+.page--vnc-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.page--vnc-viewer .console-viewport {
+  flex: 1;
+  position: relative;
+  background: #1c1724;
+  overflow: hidden;
+  min-height: 0;
+  margin-top: 46px;
+}
+
+body.platform-darwin .app-shell--desktop .page--vnc-viewer .console-viewport {
+  margin-top: 84px;
 }

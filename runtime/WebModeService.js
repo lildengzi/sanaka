@@ -1,5 +1,6 @@
 const fs = require('fs/promises');
 const http = require('http');
+const net = require('net');
 const os = require('os');
 const path = require('path');
 const { fileURLToPath } = require('url');
@@ -57,6 +58,7 @@ class WebModeService {
     this.host = options.host || '0.0.0.0';
     this.port = options.port || 0;
     this.distDir = options.distDir;
+    this.getRuntimeManager = options.getRuntimeManager || (() => null);
     this.getRuntimeSummary = options.getRuntimeSummary || (async () => ({}));
     this.invokeHandlers = options.invokeHandlers || {};
     this.server = null;
@@ -199,6 +201,11 @@ class WebModeService {
       return;
     }
 
+    if (url.pathname === '/api/audio') {
+      await this.#serveAudioStream(url, response);
+      return;
+    }
+
     if (url.pathname === '/web-bridge.js') {
       response.writeHead(200, {
         'Content-Type': MIME_TYPES['.js'],
@@ -213,61 +220,71 @@ class WebModeService {
 
   async #handleUpgrade(request, socket, head, wsServer) {
     const url = new URL(request.url || '/', `http://${this.host}:${this.boundPort || this.port || 80}`);
-    if (url.pathname !== '/api/novnc') {
-      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
-      socket.destroy();
-      return;
-    }
+    if (url.pathname === '/api/novnc') {
+      const port = Number.parseInt(url.searchParams.get('port') || '', 10);
+      if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+        socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+        socket.destroy();
+        return;
+      }
 
-    const port = Number.parseInt(url.searchParams.get('port') || '', 10);
-    if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-      socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
-      socket.destroy();
-      return;
-    }
+      wsServer.handleUpgrade(request, socket, head, (clientSocket) => {
+        const targetSocket = new WebSocket(`ws://127.0.0.1:${port}`);
+        const pair = { clientSocket, targetSocket };
+        this.socketPairs.add(pair);
 
-    wsServer.handleUpgrade(request, socket, head, (clientSocket) => {
-      const targetSocket = new WebSocket(`ws://127.0.0.1:${port}`);
-      const pair = { clientSocket, targetSocket };
-      this.socketPairs.add(pair);
-
-      const dispose = () => {
-        this.socketPairs.delete(pair);
-        if (clientSocket.readyState === WebSocket.OPEN || clientSocket.readyState === WebSocket.CONNECTING) {
-          try {
-            clientSocket.close();
-          } catch {
-            // ignore
+        const dispose = () => {
+          this.socketPairs.delete(pair);
+          if (clientSocket.readyState === WebSocket.OPEN || clientSocket.readyState === WebSocket.CONNECTING) {
+            try {
+              clientSocket.close();
+            } catch {
+              // ignore
+            }
           }
-        }
-        if (targetSocket.readyState === WebSocket.OPEN || targetSocket.readyState === WebSocket.CONNECTING) {
-          try {
-            targetSocket.close();
-          } catch {
-            // ignore
+          if (targetSocket.readyState === WebSocket.OPEN || targetSocket.readyState === WebSocket.CONNECTING) {
+            try {
+              targetSocket.close();
+            } catch {
+              // ignore
+            }
           }
-        }
-      };
+        };
 
-      targetSocket.on('open', () => {
-        clientSocket.on('message', (data, isBinary) => {
-          if (targetSocket.readyState === WebSocket.OPEN) {
-            targetSocket.send(data, { binary: isBinary });
-          }
+        targetSocket.on('open', () => {
+          clientSocket.on('message', (data, isBinary) => {
+            if (targetSocket.readyState === WebSocket.OPEN) {
+              targetSocket.send(data, { binary: isBinary });
+            }
+          });
+
+          targetSocket.on('message', (data, isBinary) => {
+            if (clientSocket.readyState === WebSocket.OPEN) {
+              clientSocket.send(data, { binary: isBinary });
+            }
+          });
         });
 
-        targetSocket.on('message', (data, isBinary) => {
-          if (clientSocket.readyState === WebSocket.OPEN) {
-            clientSocket.send(data, { binary: isBinary });
-          }
-        });
+        clientSocket.on('close', dispose);
+        targetSocket.on('close', dispose);
+        clientSocket.on('error', dispose);
+        targetSocket.on('error', dispose);
       });
+      return;
+    }
 
-      clientSocket.on('close', dispose);
-      targetSocket.on('close', dispose);
-      clientSocket.on('error', dispose);
-      targetSocket.on('error', dispose);
-    });
+    if (url.pathname === '/api/audio-ws') {
+      await this.#handleAudioUpgrade(request, socket, head, wsServer, url);
+      return;
+    }
+
+    if (url.pathname.startsWith('/api/viewer/vnc/')) {
+      await this.#handleExternalVncUpgrade(request, socket, head, wsServer, url);
+      return;
+    }
+
+    socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+    socket.destroy();
   }
 
   #handleEvents(response) {
@@ -370,6 +387,234 @@ class WebModeService {
       response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       response.end('Not found');
     }
+  }
+
+  async #serveAudioStream(url, response) {
+    const machineId = url.searchParams.get('machineId');
+    if (!machineId) {
+      response.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('Missing machineId.');
+      return;
+    }
+
+    const runtimeHandlers = this.invokeHandlers?.runtime || {};
+    const getWebAudioState = runtimeHandlers.getWebAudioState;
+    if (typeof getWebAudioState !== 'function') {
+      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('Web audio is unavailable.');
+      return;
+    }
+
+    const state = await getWebAudioState(machineId);
+    if (!state?.enabled) {
+      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('Audio bridge is inactive.');
+      return;
+    }
+
+    response.writeHead(200, {
+      'Content-Type': 'audio/wav',
+      'Cache-Control': 'no-store',
+      Connection: 'keep-alive',
+      'Transfer-Encoding': 'chunked',
+      'X-Accel-Buffering': 'no'
+    });
+
+    let dispose = () => {};
+    try {
+      const runtimeManager = this.getRuntimeManager();
+      if (!runtimeManager || typeof runtimeManager.onWebAudioChunk !== 'function') {
+        response.end();
+        return;
+      }
+      const header = runtimeManager.getWebAudioHeader?.(machineId);
+      if (header) {
+        response.write(header);
+      }
+      dispose = runtimeManager.onWebAudioChunk(machineId, (chunk) => {
+        try {
+          response.write(chunk);
+        } catch {
+          // ignore downstream close
+        }
+      });
+    } catch {
+      response.end();
+      return;
+    }
+
+    response.on('close', () => {
+      dispose();
+    });
+  }
+
+  async #handleAudioUpgrade(request, socket, head, wsServer, url) {
+    const machineId = url.searchParams.get('machineId');
+    if (!machineId) {
+      socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    const runtimeHandlers = this.invokeHandlers?.runtime || {};
+    const getWebAudioState = runtimeHandlers.getWebAudioState;
+    if (typeof getWebAudioState !== 'function') {
+      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    const state = await getWebAudioState(machineId);
+    if (!state?.enabled) {
+      socket.write('HTTP/1.1 409 Conflict\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    wsServer.handleUpgrade(request, socket, head, (clientSocket) => {
+      const runtimeManager = this.getRuntimeManager();
+      if (!runtimeManager || typeof runtimeManager.onWebAudioChunk !== 'function') {
+        clientSocket.close();
+        return;
+      }
+
+      clientSocket.send(JSON.stringify({
+        type: 'audio-meta',
+        sampleRate: state.sampleRate,
+        channels: state.channels,
+        bitsPerSample: state.bitsPerSample
+      }));
+
+      const disposeStream = runtimeManager.onWebAudioChunk(machineId, (chunk) => {
+        if (clientSocket.readyState !== WebSocket.OPEN) {
+          return;
+        }
+        try {
+          clientSocket.send(chunk, { binary: true });
+        } catch {
+          // ignore send failures during close
+        }
+      });
+
+      const dispose = () => {
+        disposeStream();
+        if (clientSocket.readyState === WebSocket.OPEN || clientSocket.readyState === WebSocket.CONNECTING) {
+          try {
+            clientSocket.close();
+          } catch {
+            // ignore
+          }
+        }
+      };
+
+      clientSocket.on('close', disposeStream);
+      clientSocket.on('error', dispose);
+    });
+  }
+
+  async #handleExternalVncUpgrade(request, socket, head, wsServer, url) {
+    const sessionId = url.pathname.slice('/api/viewer/vnc/'.length).trim();
+    if (!sessionId) {
+      socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    const viewerHandlers = this.invokeHandlers?.viewer || {};
+    const reserveTarget = viewerHandlers.reserveExternalVncProxyTarget;
+    const markConnected = viewerHandlers.markExternalVncProxyConnected;
+    const releaseTarget = viewerHandlers.releaseExternalVncProxyTarget;
+
+    if (typeof reserveTarget !== 'function' || typeof releaseTarget !== 'function') {
+      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    const reservation = await reserveTarget(sessionId);
+    if (!reservation?.ok || !reservation.target?.host || !reservation.target?.port) {
+      const statusLine = reservation?.error === 'VNC viewer session is already active.'
+        ? 'HTTP/1.1 409 Conflict\r\n\r\n'
+        : 'HTTP/1.1 404 Not Found\r\n\r\n';
+      socket.write(statusLine);
+      socket.destroy();
+      return;
+    }
+
+    wsServer.handleUpgrade(request, socket, head, (clientSocket) => {
+      const targetSocket = net.createConnection({
+        host: reservation.target.host,
+        port: reservation.target.port
+      });
+
+      const pair = { clientSocket, targetSocket };
+      this.socketPairs.add(pair);
+      let released = false;
+
+      const finalize = (options = {}) => {
+        if (!released) {
+          released = true;
+          this.socketPairs.delete(pair);
+          try {
+            releaseTarget(sessionId, options);
+          } catch {
+            // ignore cleanup failures
+          }
+        }
+      };
+
+      const closeBoth = (options = {}) => {
+        finalize(options);
+        if (clientSocket.readyState === WebSocket.OPEN || clientSocket.readyState === WebSocket.CONNECTING) {
+          try {
+            clientSocket.close();
+          } catch {
+            // ignore
+          }
+        }
+        if (!targetSocket.destroyed) {
+          targetSocket.destroy();
+        }
+      };
+
+      targetSocket.on('connect', () => {
+        if (typeof markConnected === 'function') {
+          try {
+            markConnected(sessionId);
+          } catch {
+            // ignore
+          }
+        }
+      });
+
+      targetSocket.on('data', (chunk) => {
+        if (clientSocket.readyState === WebSocket.OPEN) {
+          clientSocket.send(chunk, { binary: true });
+        }
+      });
+
+      targetSocket.on('error', (error) => {
+        closeBoth({ error: error?.message || 'Failed to connect to the remote VNC server.' });
+      });
+
+      targetSocket.on('close', () => {
+        closeBoth();
+      });
+
+      clientSocket.on('message', (data) => {
+        if (!targetSocket.destroyed) {
+          targetSocket.write(data);
+        }
+      });
+
+      clientSocket.on('close', () => {
+        closeBoth();
+      });
+
+      clientSocket.on('error', (error) => {
+        closeBoth({ error: error?.message || 'WebSocket bridge closed unexpectedly.' });
+      });
+    });
   }
 
   #resolveLocalFilePath(fileUrl, rawPath) {

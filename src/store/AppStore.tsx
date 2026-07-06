@@ -176,7 +176,10 @@ interface AppStoreValue {
   applyTemplateSelection: (templateKey: string) => Promise<void>;
   updateDraft: (updater: (machine: SakaMachine) => SakaMachine) => void;
   saveDraft: (mode?: 'save' | 'saveAs', overrideTitle?: string) => Promise<string | null>;
-  openSakaByPath: (filePath: string) => Promise<{ kind: 'machine' | 'template'; machineId: string; path?: string } | null>;
+  openSakaByPath: (
+    filePath: string,
+    options?: { refreshRecents?: boolean }
+  ) => Promise<{ kind: 'machine' | 'template'; machineId: string; path?: string } | null>;
   openSakaDialog: () => Promise<{ kind: 'machine' | 'template'; machineId: string; path?: string } | null>;
   persistSettings: (next: AppSettings) => Promise<void>;
   importTemplateFromDialog: () => Promise<{ ok: boolean; message?: string }>;
@@ -198,6 +201,7 @@ interface AppStoreValue {
   setStartError: (target: { title: string; description: string; detail?: string } | null) => void;
   renameMachine: (machinePath: string, newTitle: string) => Promise<boolean>;
   duplicateMachine: (machinePath: string) => Promise<boolean>;
+  reorderRecents: (orderedPaths: string[]) => Promise<void>;
   highlightedMachinePath: string | null;
   updateCurrentInfo: UpdateCurrentInfo | null;
   updateLastCheck: UpdateCheckResult | null;
@@ -463,6 +467,12 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setRecents(parsed);
   }, []);
 
+  const reorderRecents = useCallback(async (orderedPaths: string[]) => {
+    const next = (await window.electronAPI.recents.reorder(orderedPaths)) as RecentEntry[];
+    const parsed = recentEntrySchema.array().parse(next);
+    setRecents(parsed);
+  }, []);
+
   const flashMachineInSidebar = useCallback((machinePath: string) => {
     setHighlightedMachinePath(machinePath);
     window.setTimeout(() => {
@@ -595,7 +605,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const openSakaPayload = useCallback(
-    async (opened: Awaited<ReturnType<typeof window.electronAPI.files.readSaka>> | null) => {
+    async (
+      opened: Awaited<ReturnType<typeof window.electronAPI.files.readSaka>> | null,
+      options: { refreshRecents?: boolean } = {}
+    ) => {
       if (!opened) return null;
       const parsed = parseSakaContent(opened.content);
       if (parsed.kind === 'template') {
@@ -647,7 +660,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         ),
         ...current
       ]);
-      await pushRecent(makeRecentEntry(normalizedMachine, opened.path, opened.previewPath));
+      if (options.refreshRecents !== false) {
+        await pushRecent(makeRecentEntry(normalizedMachine, opened.path, opened.previewPath));
+      }
       flashMachineInSidebar(opened.path);
       return { kind: 'machine' as const, machineId: normalizedMachine.id, path: opened.path };
     },
@@ -655,7 +670,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const openSakaByPath = useCallback(
-    async (filePath: string) => {
+    async (filePath: string, options: { refreshRecents?: boolean } = {}) => {
       try {
         const opened = await window.electronAPI.files.readSaka(filePath);
         if (!opened) {
@@ -674,7 +689,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
           }
           return null;
         }
-        return openSakaPayload(opened);
+        return openSakaPayload(opened, options);
       } catch (error) {
         setActivity((current) => [
           makeActivity(
@@ -1117,6 +1132,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       setStartError,
       renameMachine,
       duplicateMachine,
+      reorderRecents,
       highlightedMachinePath,
       updateCurrentInfo,
       updateLastCheck,
@@ -1162,6 +1178,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       startError,
       renameMachine,
       duplicateMachine,
+      reorderRecents,
       highlightedMachinePath,
       updateCurrentInfo,
       updateLastCheck,

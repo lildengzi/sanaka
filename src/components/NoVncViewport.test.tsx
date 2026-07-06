@@ -176,4 +176,28 @@ describe('NoVncViewport', () => {
     expect(rfbInstances[0].resizeSession).toBe(false);
     vi.useRealTimers();
   });
+
+  it('uses the explicit websocketUrl when provided instead of constructing from port', async () => {
+    vi.useFakeTimers();
+    rfbInstances.length = 0;
+    vi.stubGlobal('location', new URL('http://127.0.0.1:39281/'));
+
+    render(
+      <NoVncViewport
+        active
+        machineRunning
+        websocketPort={5700}
+        websocketUrl="ws://127.0.0.1:39281/api/viewer/vnc/test-session"
+        initialDelayMs={0}
+      />
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(0);
+    });
+
+    expect(rfbInstances).toHaveLength(1);
+    expect(rfbInstances[0].__url).toBe('ws://127.0.0.1:39281/api/viewer/vnc/test-session');
+    vi.useRealTimers();
+  });
 });

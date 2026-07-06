@@ -42,6 +42,9 @@ const webModeApiSpec = {
     detectQemu: { type: 'invoke', channel: 'runtime:detect-qemu' },
     getRuntimeEnvironment: { type: 'invoke', channel: 'runtime:get-environment' },
     getSharedFolderEnvironment: { type: 'invoke', channel: 'runtime:get-shared-folder-environment' },
+    buildQemuArgList: { type: 'invoke', channel: 'runtime:build-qemu-arg-list', argStyle: 'passthrough-single' },
+    applyControlledQemuArgEdit: { type: 'invoke', channel: 'runtime:apply-controlled-qemu-arg-edit', argStyle: 'passthrough-single' },
+    normalizeCustomQemuArgs: { type: 'invoke', channel: 'runtime:normalize-custom-qemu-args', argStyle: 'passthrough-single' },
     previewMachineCommand: { type: 'invoke', channel: 'runtime:preview-machine-command' },
     startMachine: { type: 'invoke', channel: 'runtime:start-machine' },
     stopMachine: { type: 'invoke', channel: 'runtime:stop-machine' },
@@ -68,6 +71,12 @@ const webModeApiSpec = {
     skipVersion: { type: 'invoke', channel: 'updater:skip-version' },
     openUpdatePage: { type: 'invoke', channel: 'updater:open-update-page' },
     onUpdateAvailable: { type: 'event', channel: 'app:update-available' }
+  },
+  viewer: {
+    createExternalVncSession: { type: 'invoke', channel: 'viewer:create-external-vnc-session', argStyle: 'passthrough-single' },
+    getExternalVncSession: { type: 'invoke', channel: 'viewer:get-external-vnc-session' },
+    listExternalVncSessions: { type: 'invoke', channel: 'viewer:list-external-vnc-sessions' },
+    closeExternalVncSession: { type: 'invoke', channel: 'viewer:close-external-vnc-session' }
   },
   app: {
     getMetadata: { type: 'invoke', channel: 'app:get-metadata' },

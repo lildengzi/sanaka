@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { machineRoute } from '../lib/routes';
 import { makeWorkspaceMachineItems, resolveWorkspaceSelection } from '../lib/machine';
@@ -7,6 +7,8 @@ import { useAppStore } from '../store/AppStore';
 import { usePresence } from '../hooks/usePresence';
 import { useT } from '../hooks/useT';
 import { ExportMachineDialog } from './ExportMachineDialog';
+import { ConnectVncDialog } from './ConnectVncDialog';
+import type { ExternalVncSession } from '../types/electron';
 import logoUrl from '../../assets/icons/fish.png';
 
 const SunIcon = () => (
@@ -26,6 +28,14 @@ const SunIcon = () => (
 const MoonIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+);
+
+const MoreIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+    <path d="M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" fill="currentColor" />
+    <path d="M19 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" fill="currentColor" />
+    <path d="M5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" fill="currentColor" />
   </svg>
 );
 
@@ -93,6 +103,7 @@ export function AppHeaderWeb({ onLogoClick }: AppHeaderWebProps) {
     settings,
     setTheme,
     openAboutDialog,
+    openSakaByPath,
     renameMachine,
     duplicateMachine,
     setDeleteTarget,
@@ -113,7 +124,36 @@ export function AppHeaderWeb({ onLogoClick }: AppHeaderWebProps) {
     path?: string;
     disks?: Array<{ id: string; name: string; path: string }>;
   } | null>(null);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [connectVncOpen, setConnectVncOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const renameModal = usePresence(Boolean(renameTarget));
+
+  useEffect(() => {
+    if (!moreMenuOpen) {
+      return () => undefined;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!moreMenuRef.current?.contains(event.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMoreMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [moreMenuOpen]);
 
   const navClass = (active: boolean, flash: boolean) => {
     const classNames = ['workspace-sidebar__item'];
@@ -229,6 +269,16 @@ export function AppHeaderWeb({ onLogoClick }: AppHeaderWebProps) {
     }
   };
 
+  const handleOpenConnectVnc = () => {
+    setMoreMenuOpen(false);
+    setConnectVncOpen(true);
+  };
+
+  const handleVncConnected = (session: ExternalVncSession, password: string) => {
+    setConnectVncOpen(false);
+    navigate(`/viewer/vnc/${encodeURIComponent(session.id)}`, { state: { password } });
+  };
+
   return (
     <>
       {/* Mobile Header - 小屏幕顶部标题栏 */}
@@ -299,7 +349,18 @@ export function AppHeaderWeb({ onLogoClick }: AppHeaderWebProps) {
                   aria-label={item.title}
                   title={item.missing ? t('home.machineMissing') : item.title}
                   disabled={item.missing}
-                  onClick={() => !item.missing && navigate(item.path ? machineRoute(item.id, item.path) : item.source === 'draft' ? '/machines/new' : '/')}
+                  onClick={() => {
+                    if (item.missing) return;
+                    if (item.path) {
+                      void openSakaByPath(item.path, { refreshRecents: false }).then((result) => {
+                        if (result) {
+                          navigate(machineRoute(result.machineId, result.path));
+                        }
+                      });
+                      return;
+                    }
+                    navigate(item.source === 'draft' ? '/machines/new' : '/');
+                  }}
                   onContextMenu={(e) => !item.missing && handleContextMenu(e, item)}
                 >
                   <span className={`workspace-sidebar__icon workspace-sidebar__icon--machine${item.missing ? ' workspace-sidebar__icon--missing' : ''}`}>
@@ -326,7 +387,7 @@ export function AppHeaderWeb({ onLogoClick }: AppHeaderWebProps) {
         <div className="workspace-sidebar__spacer" />
 
         <div className="workspace-sidebar__section workspace-sidebar__section--footer">
-          <div className="sidebar-footer-tools">
+          <div className="sidebar-footer-tools" ref={moreMenuRef}>
             <div className="sidebar-theme-toggle">
               <button
                 className={settings.theme === 'light' ? 'sidebar-theme-toggle__btn sidebar-theme-toggle__btn--active' : 'sidebar-theme-toggle__btn'}
@@ -346,7 +407,31 @@ export function AppHeaderWeb({ onLogoClick }: AppHeaderWebProps) {
               >
                 <MoonIcon />
               </button>
+              <div className="sidebar-theme-divider" aria-hidden="true" />
+              <button
+                className="sidebar-theme-toggle__btn"
+                type="button"
+                aria-label={t('app.more')}
+                title={t('app.more')}
+                aria-haspopup="true"
+                aria-expanded={moreMenuOpen}
+                onClick={() => setMoreMenuOpen((v) => !v)}
+              >
+                <MoreIcon />
+              </button>
             </div>
+            {moreMenuOpen && (
+              <div className="sidebar-more-menu__dropdown" role="menu">
+                <button
+                  className="sidebar-more-menu__item"
+                  type="button"
+                  role="menuitem"
+                  onClick={handleOpenConnectVnc}
+                >
+                  {t('app.connectVnc')}
+                </button>
+              </div>
+            )}
           </div>
           <nav className="workspace-sidebar__utilities" aria-label="Application utilities">
             <button className={utilityClass(location.pathname === '/')} type="button" aria-label={t('home.sidebarHome')} title={t('home.sidebarHome')} onClick={() => navigate('/')}>
@@ -496,6 +581,12 @@ export function AppHeaderWeb({ onLogoClick }: AppHeaderWebProps) {
           onClose={() => setExportMachine(null)}
         />
       )}
+
+      <ConnectVncDialog
+        open={connectVncOpen}
+        onClose={() => setConnectVncOpen(false)}
+        onConnected={handleVncConnected}
+      />
     </>
   );
 }

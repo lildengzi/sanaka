@@ -45,6 +45,7 @@ function createManager(overrides = {}) {
     detector,
     registry,
     builder: overrides.builder || { build: vi.fn() },
+    pathProxyService: overrides.pathProxyService,
     isoService: overrides.isoService,
     sanakaToolsService: overrides.sanakaToolsService,
     clipboardBootstrapService: overrides.clipboardBootstrapService || {
@@ -66,6 +67,74 @@ describe('RuntimeManager', () => {
         error: new Error('QMP connection timeout.')
       })
     ).toBe('qemu-system-x86_64: -accel kvm: invalid accelerator kvm');
+  });
+
+  it('returns a structured start error when the configured optical image is missing', async () => {
+    const build = vi.fn(() => ({
+      binaryPath: '/opt/homebrew/bin/qemu-system-x86_64',
+      args: ['-machine', 'pc-q35-9.2'],
+      accelerator: 'tcg',
+      display: {
+        frontend: 'sanaka',
+        backend: 'vnc',
+        port: 5901,
+        websocketPort: 5700
+      }
+    }));
+    const { manager } = createManager({ builder: { build } });
+
+    const missingIsoPath = `/tmp/sanaka-missing-${Date.now()}.iso`;
+    const readFileMock = vi.spyOn(fsPromises, 'readFile').mockResolvedValue(`
+kind = "machine"
+id = "vm-missing-iso"
+title = "VM Missing ISO"
+
+[system]
+arch = "x86_64"
+machine_type = "pc-q35-9.2"
+accelerator = "tcg"
+boot_order = "cdrom"
+memory_mib = 2048
+cpu_cores = 2
+sound_card = "intel-hda"
+uefi = false
+
+[media]
+iso = "${missingIsoPath}"
+floppy = ""
+
+[network]
+enabled = false
+mode = "user"
+card = "e1000"
+
+[display]
+frontend = "sanaka"
+gpu = "std"
+
+[display.sanaka]
+backend = "vnc"
+scale_mode = "fit"
+clipboard = true
+
+[peripherals]
+usb_tablet = true
+
+[advanced]
+audio_backend = "auto"
+qemu_args = ""
+`);
+
+    const result = await manager.startMachine('/tmp/VMMissingIso.saka');
+
+    expect(result).toEqual({
+      ok: false,
+      error: `Optical image not found: ${missingIsoPath}`,
+      state: null
+    });
+    expect(build).not.toHaveBeenCalled();
+
+    readFileMock.mockRestore();
   });
 
   it('serializes listRunningMachines results', async () => {
@@ -183,6 +252,97 @@ arch = "i386"
     readFileMock.mockRestore();
   });
 
+  it('proxies machine file paths before building the preview command on Windows', async () => {
+    const build = vi.fn(() => ({
+      binaryPath: 'C:\\Program Files\\qemu\\qemu-system-x86_64.EXE',
+      args: ['-drive', 'file=C:/Sanaka/runtime-preview/vm-preview/path-proxy/disk-0-dir/xp.qcow2,format=qcow2,id=drive0,if=none'],
+      accelerator: 'tcg',
+      display: {
+        frontend: 'sanaka',
+        backend: 'vnc',
+        port: 5901,
+        websocketPort: 5700
+      }
+    }));
+    const pathProxyService = {
+      resolveMachinePaths: vi.fn(async ({ machine }) => ({
+        machine: {
+          ...machine,
+          disks: [{ ...machine.disks[0], path: 'C:/Sanaka/runtime-preview/vm-preview/path-proxy/disk-0-dir/xp.qcow2' }]
+        }
+      })),
+      resolveLaunchPath: vi.fn()
+    };
+    const { manager } = createManager({
+      builder: { build },
+      platform: 'win32',
+      arch: 'x64',
+      pathProxyService
+    });
+
+    const readFileMock = vi.spyOn(fsPromises, 'readFile').mockResolvedValue(`
+kind = "machine"
+id = "vm-preview"
+title = "VM Preview"
+
+[system]
+arch = "x86_64"
+machine_type = "pc-i440fx-9.2"
+accelerator = "tcg"
+boot_order = "disk"
+memory_mib = 2048
+cpu_cores = 2
+sound_card = "intel-hda"
+uefi = false
+
+[media]
+iso = ""
+floppy = ""
+
+[[disks]]
+id = "disk0"
+path = "C:\\\\Downloads\\\\小叉屁\\\\xp.qcow2"
+format = "qcow2"
+interface = "ide"
+readonly = false
+
+[network]
+enabled = false
+mode = "user"
+card = "rtl8139"
+
+[display]
+frontend = "sanaka"
+gpu = "std"
+
+[display.sanaka]
+backend = "vnc"
+scale_mode = "fit"
+clipboard = true
+
+[peripherals]
+usb_tablet = true
+
+[advanced]
+audio_backend = "auto"
+qemu_args = ""
+`);
+    const accessMock = vi.spyOn(fsPromises, 'access').mockResolvedValue(undefined);
+
+    const result = await manager.previewMachineCommand('C:\\VMPreview.saka');
+
+    expect(result.ok).toBeUndefined();
+    expect(pathProxyService.resolveMachinePaths).toHaveBeenCalledTimes(1);
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({
+      machine: expect.objectContaining({
+        disks: [expect.objectContaining({ path: 'C:/Sanaka/runtime-preview/vm-preview/path-proxy/disk-0-dir/xp.qcow2' })]
+      })
+    }));
+
+    readFileMock.mockRestore();
+    accessMock.mockRestore();
+  });
+
   it('serializes an already-running machine result', async () => {
     const { manager, registryState } = createManager();
     registryState.set('vm-2', {
@@ -268,7 +428,17 @@ arch = "x86_64"
   });
 
   it('changes mounted cdrom media through QMP', async () => {
-    const { manager, registryState } = createManager();
+    const pathProxyService = {
+      resolveMachinePaths: vi.fn(async ({ machine }) => ({ machine })),
+      resolveLaunchPath: vi.fn(async () => ({
+        qemuPath: 'C:/Sanaka/runtime/vm-4/path-proxy/change-media-cdrom.iso'
+      }))
+    };
+    const { manager, registryState } = createManager({
+      pathProxyService,
+      platform: 'win32',
+      arch: 'x64'
+    });
     const queryBlock = vi.fn(async () => [
       {
         qdev: 'ide0-1-0',
@@ -310,9 +480,10 @@ arch = "x86_64"
 
     expect(result.ok).toBe(true);
     expect(queryBlock).toHaveBeenCalledTimes(1);
+    expect(pathProxyService.resolveLaunchPath).toHaveBeenCalledTimes(1);
     expect(blockdevChangeMedium).toHaveBeenCalledWith({
       id: 'ide0-1-0',
-      filename: '/tmp/next.iso',
+      filename: 'C:/Sanaka/runtime/vm-4/path-proxy/change-media-cdrom.iso',
       format: 'raw',
       readOnly: true
     });

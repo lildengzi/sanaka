@@ -13,6 +13,7 @@ import { MachineBuilderPage } from './pages/MachineBuilderPage';
 import { MachineConsolePage } from './pages/MachineConsolePage';
 import { MachineDetailsPage } from './pages/MachineDetailsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { VncViewerPage } from './pages/VncViewerPage';
 import { useAppStore } from './store/AppStore';
 import { useT } from './hooks/useT';
 
@@ -37,9 +38,25 @@ function ConsoleLayout() {
   return (
     <div className="app-shell app-shell--console">
       <div className="app-shell__window">
-        <div className="app-dragbar" aria-hidden="true" />
+        <div className="app-dragbar app-dragbar--full" aria-hidden="true" />
         <main className="app-shell__content app-shell__content--console">
           <MachineConsolePage />
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function VncViewerLayout() {
+  return (
+    <div className="app-shell app-shell--console">
+      <div className="app-shell__window">
+        <div className="app-dragbar app-dragbar--full" aria-hidden="true" />
+        <main className="app-shell__content app-shell__content--console">
+          <Routes>
+            <Route path="/viewer/vnc/:sessionId" element={<VncViewerPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </main>
       </div>
     </div>
@@ -89,9 +106,9 @@ function MainLayout() {
 
   return (
     <>
-      <div className="app-shell">
+      <div className="app-shell app-shell--web">
         <div className="app-shell__window">
-          <div className="app-dragbar" aria-hidden="true" />
+          <div className="app-dragbar app-dragbar--sidebar" aria-hidden="true" />
           <div className="app-shell__surface">
             <AppHeaderWeb onLogoClick={handleLogoClick} />
             <main className="app-shell__content">
@@ -177,8 +194,9 @@ function MainLayout() {
 function RoutedShellWeb() {
   const location = useLocation();
   const isConsole = location.pathname.endsWith('/console');
+  const isViewer = location.pathname.startsWith('/viewer/');
 
-  return isConsole ? <ConsoleLayout /> : <MainLayout />;
+  return isConsole ? <ConsoleLayout /> : isViewer ? <VncViewerLayout /> : <MainLayout />;
 }
 
 export function AppWeb() {

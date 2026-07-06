@@ -3,8 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppHeader } from '../components/AppHeader';
+import { createMachineFromTemplate } from '../domain/templates';
+import { serializeSakaMachine } from '../lib/saka';
 import { AppStoreProvider } from '../store/AppStore';
 import { HomePage } from './HomePage';
+import { MachineDetailsPage } from './MachineDetailsPage';
 import { SettingsPage } from './SettingsPage';
 
 const runtimeEnvironment = {
@@ -28,12 +31,26 @@ const runtimeEnvironment = {
 };
 
 function mockElectronApi(recents: Array<Record<string, unknown>> = []) {
+  const machine = createMachineFromTemplate('win11');
+  machine.id = 'machine-1';
+  machine.title = 'Windows Dev Box';
+
   window.electronAPI = {
     files: {
       openMachineBundle: vi.fn(async () => null),
       openSaka: vi.fn(async () => null),
       createMachineBundle: vi.fn(async () => ({ path: '/tmp/example.saka', configPath: '/tmp/example.saka/machine.svm' })),
-      readSaka: vi.fn(async () => null),
+      readSaka: vi.fn(async (path: string) => {
+        if (path === '/tmp/windows-dev-box.saka') {
+          return {
+            path,
+            configPath: `${path}/machine.svm`,
+            content: serializeSakaMachine(machine),
+            legacySingleFile: false
+          };
+        }
+        return null;
+      }),
       saveSaka: vi.fn(async () => ({ path: '/tmp/example.saka', configPath: '/tmp/example.saka/machine.svm' })),
       saveSakaAs: vi.fn(async () => ({ path: '/tmp/example.saka', configPath: '/tmp/example.saka/machine.svm' })),
       trashMachineBundle: vi.fn(async () => ({ ok: true as const })),
@@ -66,7 +83,8 @@ function mockElectronApi(recents: Array<Record<string, unknown>> = []) {
     recents: {
       list: vi.fn(async () => recents),
       push: vi.fn(async (entry) => [entry]),
-      remove: vi.fn(async () => [])
+      remove: vi.fn(async () => []),
+      reorder: vi.fn(async (paths) => paths)
     },
     runtime: {
       detectQemu: vi.fn(async () => runtimeEnvironment),
@@ -128,6 +146,7 @@ function renderHome() {
             <main className="app-shell__content">
               <Routes>
                 <Route path="/" element={<HomePage />} />
+                <Route path="/machines/:machineId" element={<MachineDetailsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Routes>
             </main>
@@ -176,6 +195,28 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: '设置' }));
 
     expect(await screen.findByText('管理应用偏好、默认配置和模板。')).toBeInTheDocument();
+  });
+
+  it('opens machine details when clicking a recent machine in the sidebar', async () => {
+    mockElectronApi([
+      {
+        id: 'machine-1',
+        title: 'Windows Dev Box',
+        path: '/tmp/windows-dev-box.saka',
+        kind: 'machine',
+        templateLabel: 'Windows 10',
+        updatedAt: '2026-06-02T12:00:00.000Z',
+        status: 'saved'
+      }
+    ]);
+
+    const user = userEvent.setup();
+    renderHome();
+
+    const sidebarMachine = await screen.findByRole('button', { name: 'Windows Dev Box' });
+    await user.click(sidebarMachine);
+
+    expect(await screen.findByRole('heading', { name: 'Windows Dev Box' })).toBeInTheDocument();
   });
 
   it('opens web mode from the top tools menu', async () => {

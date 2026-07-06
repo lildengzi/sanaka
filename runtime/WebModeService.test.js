@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import fs from 'fs/promises';
+import net from 'net';
 import os from 'os';
 import path from 'path';
+import WebSocket from 'ws';
+import { ExternalVncViewerService } from './ExternalVncViewerService';
 import { WebModeService } from './WebModeService';
 
 async function fetchText(url) {
@@ -167,5 +170,60 @@ describe('WebModeService', () => {
 
     expect(result.status).toBe(200);
     expect(result.text).toContain("/api/file?url=");
+  });
+
+  it('bridges an external VNC websocket session to a raw TCP target', async () => {
+    const targetServer = net.createServer();
+    await new Promise((resolve) => targetServer.listen(0, '127.0.0.1', resolve));
+    const address = targetServer.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Failed to allocate a TCP target port.');
+    }
+
+    targetServer.on('connection', (socket) => {
+      socket.on('data', (chunk) => {
+        if (chunk.toString('utf8') === 'ping') {
+          socket.write(Buffer.from('pong'));
+        }
+      });
+    });
+
+    const viewerService = new ExternalVncViewerService();
+    const session = viewerService.createSession({
+      host: '127.0.0.1',
+      port: address.port
+    });
+
+    const webService = new WebModeService({
+      appName: 'Sanaka',
+      appVersion: '0.0.3-beta',
+      host: '127.0.0.1',
+      invokeHandlers: {
+        viewer: {
+          reserveExternalVncProxyTarget: async (sessionId) => viewerService.reserveProxyTarget(sessionId),
+          markExternalVncProxyConnected: async (sessionId) => viewerService.markProxyConnected(sessionId),
+          releaseExternalVncProxyTarget: async (sessionId, options) => viewerService.releaseProxyTarget(sessionId, options)
+        }
+      }
+    });
+    services.push(webService);
+
+    const state = await webService.start();
+    const client = new WebSocket(`ws://127.0.0.1:${state.port}/api/viewer/vnc/${session.id}`);
+    const payload = await new Promise((resolve, reject) => {
+      client.on('open', () => {
+        client.send(Buffer.from('ping'));
+      });
+      client.on('message', (data) => {
+        resolve(Buffer.isBuffer(data) ? data.toString('utf8') : String(data));
+      });
+      client.on('error', reject);
+    });
+
+    expect(payload).toBe('pong');
+    expect(viewerService.getSession(session.id)?.status).toBe('connected');
+
+    client.close();
+    targetServer.close();
   });
 });

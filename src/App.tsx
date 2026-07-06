@@ -12,6 +12,7 @@ import { MachineBuilderPage } from './pages/MachineBuilderPage';
 import { MachineConsolePage } from './pages/MachineConsolePage';
 import { MachineDetailsPage } from './pages/MachineDetailsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { VncViewerPage } from './pages/VncViewerPage';
 import { useAppStore } from './store/AppStore';
 import { useT } from './hooks/useT';
 
@@ -34,11 +35,27 @@ const AlertIcon = ({ style }: { style?: React.CSSProperties }) => (
 
 function ConsoleLayout() {
   return (
-    <div className="app-shell app-shell--console">
+    <div className="app-shell app-shell--desktop app-shell--console">
       <div className="app-shell__window">
-        <div className="app-dragbar" aria-hidden="true" />
+        <div className="app-dragbar app-dragbar--full" aria-hidden="true" />
         <main className="app-shell__content app-shell__content--console">
           <MachineConsolePage />
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function VncViewerLayout() {
+  return (
+    <div className="app-shell app-shell--desktop app-shell--console">
+      <div className="app-shell__window">
+        <div className="app-dragbar app-dragbar--full" aria-hidden="true" />
+        <main className="app-shell__content app-shell__content--console">
+          <Routes>
+            <Route path="/viewer/vnc/:sessionId" element={<VncViewerPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </main>
       </div>
     </div>
@@ -118,9 +135,9 @@ function MainLayout() {
 
   return (
     <>
-      <div className="app-shell">
+      <div className="app-shell app-shell--desktop">
         <div className="app-shell__window">
-          <div className="app-dragbar" aria-hidden="true" />
+          <div className="app-dragbar app-dragbar--sidebar" aria-hidden="true" />
           <div className="app-shell__surface">
             <AppHeader onLogoClick={handleLogoClick} />
             <main className="app-shell__content">
@@ -174,6 +191,7 @@ function MainLayout() {
 export function RoutedShell() {
   const location = useLocation();
   const isConsole = location.pathname.endsWith('/console');
+  const isViewer = location.pathname.startsWith('/viewer/');
   const { startError, setStartError } = useAppStore();
   const t = useT();
   const startErrorModal = usePresence(Boolean(startError));
@@ -181,7 +199,7 @@ export function RoutedShell() {
 
   return (
     <>
-      {isConsole ? <ConsoleLayout /> : <MainLayout />}
+      {isConsole ? <ConsoleLayout /> : isViewer ? <VncViewerLayout /> : <MainLayout />}
       {startErrorModal.mounted && (
         <div className={startErrorModal.visible ? 'modal-backdrop modal-backdrop--visible' : 'modal-backdrop'} role="presentation" onClick={() => setStartError(null)}>
           <div className={startErrorModal.visible ? 'modal-card modal-card--visible' : 'modal-card'} role="dialog" aria-modal="true" aria-labelledby="start-error-title" onClick={(event) => event.stopPropagation()}>

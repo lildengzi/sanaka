@@ -1,20 +1,83 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { DebugCommandPanel } from '../components/DebugCommandPanel';
 import { MachineVisual } from '../components/MachineVisual';
-import { SectionCard, StatusChip } from '../components/Field';
+import { StatusChip } from '../components/Field';
 import { useT } from '../hooks/useT';
-import { formatRuntimeBackend } from '../lib/console-session';
 import { makeAudioHint, makeDisplayHint } from '../lib/machine';
 import { consoleRoute } from '../lib/routes';
 import { useAppStore } from '../store/AppStore';
 
-const TrashIcon = ({ style }: { style?: React.CSSProperties }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
+// 图标组件
+const TrashIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="3 6 5 6 21 6" />
     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
     <line x1="10" y1="11" x2="10" y2="17" />
     <line x1="14" y1="11" x2="14" y2="17" />
+  </svg>
+);
+
+const EditIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </svg>
+);
+
+const DisplayIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="3" width="20" height="14" rx="2" />
+    <line x1="8" y1="21" x2="16" y2="21" />
+    <line x1="12" y1="17" x2="12" y2="21" />
+  </svg>
+);
+
+const AudioIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+  </svg>
+);
+
+const NetworkIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="2" y1="12" x2="22" y2="12" />
+    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+  </svg>
+);
+
+const MediaIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="12" r="4" />
+    <line x1="12" y1="2" x2="12" y2="8" />
+    <line x1="12" y1="16" x2="12" y2="22" />
+    <line x1="2" y1="12" x2="8" y2="12" />
+    <line x1="16" y1="12" x2="22" y2="12" />
+  </svg>
+);
+
+const DiskIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2L2 7l10 5 10-5-10-5z" />
+    <path d="M2 12l10 5 10-5" />
+    <path d="M2 17l10 5 10-5" />
+  </svg>
+);
+
+const ArchIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="4" y="4" width="16" height="16" rx="2" />
+    <rect x="9" y="9" width="6" height="6" />
+    <line x1="9" y1="1" x2="9" y2="4" />
+    <line x1="15" y1="1" x2="15" y2="4" />
+    <line x1="9" y1="20" x2="9" y2="23" />
+    <line x1="15" y1="20" x2="15" y2="23" />
+    <line x1="20" y1="9" x2="23" y2="9" />
+    <line x1="20" y1="15" x2="23" y2="15" />
+    <line x1="1" y1="9" x2="4" y2="9" />
+    <line x1="1" y1="15" x2="4" y2="15" />
   </svg>
 );
 
@@ -40,6 +103,23 @@ function statusTone(status: string | undefined): 'success' | undefined {
   if (status === 'running') return 'success';
   if (status === 'starting' || status === 'stopping') return undefined;
   return undefined;
+}
+
+// 配置信息项组件
+interface ConfigItemProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}
+
+function ConfigItem({ icon, label, value }: ConfigItemProps) {
+  return (
+    <div className="details-config-item">
+      <span className="details-config-item__icon">{icon}</span>
+      <span className="details-config-item__label">{label}</span>
+      <span className="details-config-item__value">{value}</span>
+    </div>
+  );
 }
 
 export function MachineDetailsPage() {
@@ -111,186 +191,148 @@ export function MachineDetailsPage() {
   };
 
   return (
-    <>
-      <div className="page page--details">
-        <div className="workspace-header">
-          <div>
-            <span className="eyebrow">{t('common.machine')}</span>
-            <h1>{machine.title}</h1>
-            <p>{machine.template.label}</p>
-            <div className="details-meta">
-              <StatusChip tone={statusTone(machineStatus)}>
-                {statusLabel(machineStatus, t)}
-              </StatusChip>
-              <StatusChip tone="accent">{machine.template.label}</StatusChip>
-              <StatusChip>{`${t('details.metaDisplay')} · ${makeDisplayHint(machine)}`}</StatusChip>
-              <StatusChip>{`${t('details.metaDisks')} · ${machine.disks.length}`}</StatusChip>
-            </div>
+    <div className="page page--details">
+      <div className="details-container">
+        {/* 预览图区域 */}
+        <section className="details-preview-section">
+          <MachineVisual
+            entry={{
+              path: draft.filePath,
+              previewImageUrl: draft.previewPath,
+              templateLabel: machine.template.label,
+              status: draft.dirty ? 'draft' : 'saved'
+            }}
+            className="details-preview"
+            imageClassName="details-preview__image"
+            placeholderLabel={t('home.previewEmpty')}
+            isRunning={isMachineRunning}
+            onPlayClick={qemuAvailable ? handlePlayClick : undefined}
+          />
+        </section>
+
+        {/* 标题区域 */}
+        <section className="details-header-section">
+          <div className="details-header-main">
+            <h1 className="details-title">{machine.title}</h1>
+            <p className="details-subtitle">{machine.template.label}</p>
           </div>
-          <div className="workspace-header__actions">
-            <button className="button button--secondary" type="button" onClick={() => navigate('/machines/new')}>
-              {t('details.editConfig')}
+          <div className="details-header-actions">
+            <button
+              className="details-edit-btn"
+              type="button"
+              onClick={() => navigate('/machines/new')}
+              title={t('details.editConfig')}
+              aria-label={t('details.editConfig')}
+            >
+              <EditIcon />
+            </button>
+            <StatusChip tone={statusTone(machineStatus)}>
+              {statusLabel(machineStatus, t)}
+            </StatusChip>
+          </div>
+        </section>
+
+        {/* 操作按钮区域 */}
+        <section className="details-actions-section">
+          <div className="details-actions-row">
+            <button
+              className="button button--primary"
+              type="button"
+              disabled={!qemuAvailable}
+              onClick={handlePlayClick}
+              title={!qemuAvailable ? t('details.qemuMissingHint') : undefined}
+            >
+              {isMachineRunning ? t('details.enterMachine') : t('details.openConsole')}
+            </button>
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => void saveDraft('save')}
+            >
+              {t('details.saveMachine')}
             </button>
           </div>
-        </div>
+          <button
+            className="details-edit-link"
+            type="button"
+            onClick={() => navigate('/machines/new')}
+          >
+            <EditIcon />
+            <span>{t('details.editConfig')}</span>
+          </button>
+        </section>
 
-        <div className="details-layout details-layout--single">
-          <div className="details-main">
-            <section className="details-hero">
-              <MachineVisual
-                entry={{
-                  path: draft.filePath,
-                  previewImageUrl: draft.previewPath,
-                  templateLabel: machine.template.label,
-                  status: draft.dirty ? 'draft' : 'saved'
-                }}
-                className="details-hero__preview"
-                imageClassName="details-hero__preview-image"
-                placeholderLabel={t('home.previewEmpty')}
-                isRunning={isMachineRunning}
-                onPlayClick={qemuAvailable ? handlePlayClick : undefined}
-              />
-              <div className="details-hero__summary">
-                <div className="details-hero__copy">
-                  <strong>{machine.title}</strong>
-                  <p>{machine.template.label}</p>
-                </div>
-                <div className="details-hero__chips">
-                  <StatusChip tone={statusTone(machineStatus)}>
-                    {statusLabel(machineStatus, t)}
-                  </StatusChip>
-                  <StatusChip tone="accent">{machine.template.label}</StatusChip>
-                </div>
-                <div className="details-hero__actions">
-                  <button className="button button--secondary" type="button" onClick={() => void saveDraft('save')}>
-                    {t('details.saveMachine')}
-                  </button>
-                  <button
-                    className="button button--primary"
-                    type="button"
-                    disabled={!qemuAvailable}
-                    onClick={handlePlayClick}
-                    title={!qemuAvailable ? t('details.qemuMissingHint') : undefined}
-                  >
-                    {isMachineRunning ? t('details.enterMachine') : t('details.openConsole')}
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {!qemuAvailable && (
-              <div className="warning-banner warning-banner--details" role="alert">
-                <strong>{t('common.qemuMissing')}</strong>
-                {runtimeEnvironment?.installHint && (
-                  <span className="warning-banner__hint">
-                    {runtimeEnvironment.installHint}
-                  </span>
-                )}
-              </div>
+        {/* QEMU 警告 */}
+        {!qemuAvailable && (
+          <div className="warning-banner warning-banner--details" role="alert">
+            <strong>{t('common.qemuMissing')}</strong>
+            {runtimeEnvironment?.installHint && (
+              <span className="warning-banner__hint">
+                {runtimeEnvironment.installHint}
+              </span>
             )}
-
-            <SectionCard title={t('details.overview')}>
-              <div className="details-fact-list">
-                <div className="details-fact-row">
-                  <span>{t('common.machine')}</span>
-                  <strong>{machine.title}</strong>
-                </div>
-                <div className="details-fact-row">
-                  <span>{t('common.template')}</span>
-                  <strong>{machine.template.label}</strong>
-                </div>
-                <div className="details-fact-row">
-                  <span>{t('details.status')}</span>
-                  <strong>{statusLabel(machineStatus, t)}</strong>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard title={t('details.configuration')}>
-              <div className="config-grid">
-                <div className="config-item">
-                  <span>{t('details.display')}</span>
-                  <strong>{makeDisplayHint(machine)}</strong>
-                </div>
-                <div className="config-item">
-                  <span>{t('details.audio')}</span>
-                  <strong>{audioHint}</strong>
-                </div>
-                <div className="config-item">
-                  <span>{t('details.network')}</span>
-                  <strong>{machine.network.enabled ? `${machine.network.mode} / ${machine.network.card}` : t('common.disabled')}</strong>
-                </div>
-                <div className="config-item">
-                  <span>{t('details.media')}</span>
-                  <strong>{machine.media.iso || t('details.noMedia')}</strong>
-                </div>
-                <div className="config-item">
-                  <span>{t('details.disks')}</span>
-                  <strong>{machine.disks.length}</strong>
-                </div>
-                <div className="config-item">
-                  <span>{t('details.architecture')}</span>
-                  <strong>{machine.system.arch}</strong>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard title={t('details.runtimeInfoTitle')}>
-              <div className="config-grid">
-                <div className="config-item">
-                  <span>{t('details.runtimeQemuStatus')}</span>
-                  <strong>{qemuAvailable ? t('details.runtimeQemuAvailable') : t('details.runtimeQemuUnavailable')}</strong>
-                </div>
-                <div className="config-item">
-                  <span>{t('details.runtimeDisplayBackend')}</span>
-                  <strong>
-                    {runtimeState
-                      ? formatRuntimeBackend(runtimeState)
-                      : t('details.runtimeNotRunning')}
-                  </strong>
-                </div>
-                <div className="config-item">
-                  <span>{t('details.runtimeDisplayPort')}</span>
-                  <strong>{runtimeState ? String(runtimeState.displayPort) : '—'}</strong>
-                </div>
-                {runtimeState?.displayWebSocketPort != null && (
-                  <div className="config-item">
-                    <span>{t('details.runtimeWebsocketPort')}</span>
-                    <strong>{String(runtimeState.displayWebSocketPort)}</strong>
-                  </div>
-                )}
-                <div className="config-item">
-                  <span>{t('details.runtimeLastError')}</span>
-                  <strong style={runtimeState?.lastError ? { color: 'var(--danger)' } : undefined}>
-                    {runtimeState?.lastError ?? t('details.runtimeNoError')}
-                  </strong>
-                </div>
-              </div>
-            </SectionCard>
-
-            <DebugCommandPanel bundlePath={draft.filePath} />
-
-            {draft.filePath ? (
-              <section className="danger-zone" aria-label={t('details.deleteTitle')}>
-                <div>
-                  <strong>{t('details.deleteTitle')}</strong>
-                  <p>{t('details.deleteDescription')}</p>
-                </div>
-                <button
-                  className="icon-button icon-button--danger"
-                  type="button"
-                  onClick={() => setDeleteTarget({ path: draft.filePath!, title: machine.title })}
-                  aria-label={t('details.deleteMachine')}
-                  title={t('details.deleteMachine')}
-                  style={{ display: 'grid', placeItems: 'center', flexShrink: 0 }}
-                >
-                  <TrashIcon style={{ width: '20px', height: '20px' }} />
-                </button>
-              </section>
-            ) : null}
           </div>
-        </div>
+        )}
+
+        {/* 配置信息区域 */}
+        <section className="details-config-section">
+          <h2 className="details-section-title">{t('details.configuration')}</h2>
+          <div className="details-config-card">
+            <ConfigItem
+              icon={<DisplayIcon />}
+              label={t('details.display')}
+              value={makeDisplayHint(machine)}
+            />
+            <ConfigItem
+              icon={<AudioIcon />}
+              label={t('details.audio')}
+              value={audioHint}
+            />
+            <ConfigItem
+              icon={<NetworkIcon />}
+              label={t('details.network')}
+              value={machine.network.enabled ? `${machine.network.mode} / ${machine.network.card}` : t('common.disabled')}
+            />
+            <ConfigItem
+              icon={<MediaIcon />}
+              label={t('details.media')}
+              value={machine.media.iso || t('details.noMedia')}
+            />
+            <ConfigItem
+              icon={<DiskIcon />}
+              label={t('details.disks')}
+              value={String(machine.disks.length)}
+            />
+            <ConfigItem
+              icon={<ArchIcon />}
+              label={t('details.architecture')}
+              value={machine.system.arch}
+            />
+          </div>
+        </section>
+
+        {/* 危险操作区域 */}
+        {draft.filePath && (
+          <section className="details-danger-section">
+            <h2 className="details-section-title">{t('details.deleteTitle')}</h2>
+            <div className="details-danger-card">
+              <div className="details-danger-info">
+                <strong>{t('details.deleteTitle')}</strong>
+                <p>{t('details.deleteDescription')}</p>
+              </div>
+              <button
+                className="icon-button icon-button--danger"
+                type="button"
+                onClick={() => setDeleteTarget({ path: draft.filePath!, title: machine.title })}
+                aria-label={t('details.deleteMachine')}
+                title={t('details.deleteMachine')}
+              >
+                <TrashIcon />
+              </button>
+            </div>
+          </section>
+        )}
       </div>
-    </>
+    </div>
   );
 }

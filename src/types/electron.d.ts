@@ -110,6 +110,31 @@ export interface WebModeState {
   localOnly: boolean;
 }
 
+export interface ExternalVncSession {
+  id: string;
+  type: 'external-vnc';
+  host: string;
+  port: number;
+  displayAddress: string;
+  status: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error' | 'closed';
+  createdAt: string;
+  updatedAt: string;
+  lastError: string | null;
+  hasPassword: boolean;
+  activeConnections: number;
+  websocketPath?: string;
+  websocketUrl?: string | null;
+  localWebsocketUrl?: string | null;
+  networkWebsocketUrl?: string | null;
+}
+
+export interface CreateExternalVncSessionRequest {
+  address?: string;
+  host?: string;
+  port?: number;
+  password?: string;
+}
+
 export interface SharedFolderConfig {
   enabled: boolean;
   hostPath: string;
@@ -215,6 +240,32 @@ export interface RuntimeMachineState {
   machineMac?: string;
   sharedFolder?: RuntimeSharedFolderState;
   clipboardBridge?: RuntimeClipboardBridgeState;
+}
+
+export type QemuArgSource = 'controlled' | 'custom';
+
+export type ControlledQemuBindingKey =
+  | 'system.memory_mib'
+  | 'system.cpu_cores'
+  | 'system.accelerator'
+  | 'system.boot_order'
+  | 'network.mode'
+  | 'network.card';
+
+export interface QemuArgItem {
+  id: string;
+  raw: string;
+  source: QemuArgSource;
+  bindingKey?: ControlledQemuBindingKey;
+  editable: boolean;
+}
+
+export interface RuntimeWebAudioState {
+  enabled: boolean;
+  captureFilePath: string;
+  sampleRate: number;
+  channels: number;
+  bitsPerSample: number;
 }
 
 export interface RuntimeCommandPreview {
@@ -379,11 +430,22 @@ export interface ElectronApi {
     list: () => Promise<unknown>;
     push: (entry: unknown) => Promise<unknown>;
     remove: (path: string) => Promise<unknown>;
+    reorder: (paths: string[]) => Promise<unknown>;
   };
   runtime: {
     detectQemu: () => Promise<QemuEnvironment>;
     getRuntimeEnvironment: () => Promise<QemuEnvironment>;
     getSharedFolderEnvironment?: () => Promise<SharedFolderEnvironment>;
+    buildQemuArgList?: (machine: import('../domain/schemas').SakaMachine) => Promise<{ args: QemuArgItem[] }>;
+    applyControlledQemuArgEdit?: (payload: {
+      machine: import('../domain/schemas').SakaMachine;
+      bindingKey: ControlledQemuBindingKey;
+      raw: string;
+    }) => Promise<{ ok: boolean; machine?: import('../domain/schemas').SakaMachine; args?: QemuArgItem[]; error?: string }>;
+    normalizeCustomQemuArgs?: (payload: {
+      machine: import('../domain/schemas').SakaMachine;
+      customArgs: string[];
+    }) => Promise<{ ok: boolean; machine: import('../domain/schemas').SakaMachine; args: QemuArgItem[] }>;
     previewMachineCommand: (bundlePath: string) => Promise<RuntimeCommandPreview>;
     startMachine: (bundlePath: string) => Promise<StartMachineResult>;
     stopMachine: (machineId: string) => Promise<StopMachineResult>;
@@ -394,6 +456,7 @@ export interface ElectronApi {
     mountSanakaToolsIso?: (machineId: string) => Promise<StopMachineResult>;
     mountSanakaToolsLinuxIso?: (machineId: string) => Promise<StopMachineResult>;
     getMachineState: (machineId: string) => Promise<RuntimeMachineState | null>;
+    getWebAudioState?: (machineId: string) => Promise<RuntimeWebAudioState | null>;
     listRunningMachines: () => Promise<RuntimeMachineState[]>;
     onRuntimeEvent: (handler: (payload: RuntimeEvent) => void) => () => void;
   };
@@ -415,6 +478,12 @@ export interface ElectronApi {
     skipVersion: (version: string) => Promise<{ ok: true; skippedVersion: string }>;
     openUpdatePage: (url: string) => Promise<{ ok: true }>;
     onUpdateAvailable: (handler: (payload: UpdateAvailableEvent) => void) => () => void;
+  };
+  viewer?: {
+    createExternalVncSession?: (request: CreateExternalVncSessionRequest) => Promise<ExternalVncSession>;
+    getExternalVncSession?: (sessionId: string) => Promise<ExternalVncSession | null>;
+    listExternalVncSessions?: () => Promise<ExternalVncSession[]>;
+    closeExternalVncSession?: (sessionId: string) => Promise<{ ok: boolean; session?: ExternalVncSession; error?: string }>;
   };
   app: {
     getMetadata: () => Promise<AppMetadata>;

@@ -88,7 +88,8 @@ function mockElectronApi() {
         }
       ]),
       push: vi.fn(async (entry) => [entry]),
-      remove
+      remove,
+      reorder: vi.fn(async (paths) => paths)
     },
     runtime: {
       detectQemu: vi.fn(async () => runtimeEnvironment),
@@ -173,6 +174,26 @@ describe('MachineDetailsPage', () => {
     await waitFor(() => {
       expect(trashMachineBundle).toHaveBeenCalledWith(machinePath);
       expect(remove).toHaveBeenCalledWith(machinePath);
+    });
+  });
+
+  it('starts the machine when clicking the preview overlay button', async () => {
+    mockElectronApi();
+    const user = userEvent.setup();
+
+    render(
+      <AppStoreProvider>
+        <MemoryRouter initialEntries={[`/machines/machine-1?path=${encodeURIComponent(machinePath)}`]}>
+          <RoutedShell />
+        </MemoryRouter>
+      </AppStoreProvider>
+    );
+
+    const startButtons = await screen.findAllByRole('button', { name: '启动虚拟机' });
+    await user.click(startButtons[0]);
+
+    await waitFor(() => {
+      expect(window.electronAPI.runtime.startMachine).toHaveBeenCalledWith(machinePath);
     });
   });
 });

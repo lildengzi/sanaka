@@ -45,7 +45,37 @@ export const resources = {
       webModeStatusErrorTitle: '读取网页模式状态失败',
       webModeStatusErrorDescription: '无法读取当前网页模式服务状态。',
       webModeStopErrorTitle: '停止网页模式失败',
-      webModeStopErrorDescription: '无法停止当前网页模式服务。'
+      webModeStopErrorDescription: '无法停止当前网页模式服务。',
+      connectVnc: '连接到 VNC'
+    },
+    viewer: {
+      title: 'VNC Viewer',
+      subtitle: '连接到一台远程 VNC 机器，查看画面并进行操作。',
+      addressLabel: 'VNC 地址',
+      addressPlaceholder: '192.168.1.10:5901',
+      portLabel: '端口',
+      portPlaceholder: '5900',
+      passwordLabel: '密码（可选）',
+      passwordPlaceholder: '留空表示无密码',
+      connect: '连接',
+      connecting: '正在连接…',
+      disconnect: '断开连接',
+      disconnected: '已断开',
+      connectingState: '正在连接…',
+      connected: '已连接',
+      reconnecting: '正在恢复…',
+      unavailable: '无法连接',
+      waitingConnection: '等待连接…',
+      back: '返回',
+      sessionNotFound: '该 VNC 会话不存在或已关闭。',
+      errorEmptyAddress: '请输入 VNC 地址',
+      errorInvalidPort: '端口格式不正确',
+      errorConnectFailed: '无法连接到目标地址',
+      errorAuthFailed: '密码错误或目标拒绝连接',
+      errorDisconnected: '远程连接已断开',
+      errorGeneric: '连接失败',
+      addressHint: '可以直接输入 主机:端口，也可以只输入主机。默认端口为 5900。',
+      externalSessionNote: '这是一次外部 VNC 连接，不会进入机器列表。'
     },
     home: {
       shellLabel: 'Desktop Workspace',
@@ -170,7 +200,13 @@ export const resources = {
         clearIso: '清除',
         saveAs: '另存到其他位置',
         pickFile: '选择文件',
-        clear: '清除'
+        clear: '清除',
+        add: '添加',
+        addArg: '添加自定义参数',
+        removeArg: '删除参数'
+      },
+      errors: {
+        invalidArgValue: '参数格式无效'
       },
       firmware: {
         auto: '自动查找',
@@ -306,6 +342,7 @@ export const resources = {
       liveDisplayReconnecting: '正在恢复画面…',
       liveDisplayUnavailable: '暂时无法连接到虚拟机画面',
       info: '信息',
+      keyboard: '键盘',
       changeDisk: '换盘',
       reset: '重置',
       close: '关闭',
@@ -316,6 +353,9 @@ export const resources = {
       scaleNative: '100%',
       scaleFit: '适应窗口',
       scaleStretch: '拉伸',
+      inputMode: '输入模式',
+      touchMode: '指绘模式',
+      mouseMode: '鼠标模式',
       more: '更多',
       enhancements: '安装 Sanaka 增强功能',
       enhancementsWindows: 'Windows',
@@ -588,7 +628,37 @@ export const resources = {
       webModeStatusErrorTitle: 'Failed to Read Web Mode Status',
       webModeStatusErrorDescription: 'Could not read the current web mode service state.',
       webModeStopErrorTitle: 'Failed to Stop Web Mode',
-      webModeStopErrorDescription: 'Could not stop the current web mode service.'
+      webModeStopErrorDescription: 'Could not stop the current web mode service.',
+      connectVnc: 'Connect to VNC'
+    },
+    viewer: {
+      title: 'VNC Viewer',
+      subtitle: 'Connect to a remote VNC machine to view and control its screen.',
+      addressLabel: 'VNC Address',
+      addressPlaceholder: '192.168.1.10:5901',
+      portLabel: 'Port',
+      portPlaceholder: '5900',
+      passwordLabel: 'Password (optional)',
+      passwordPlaceholder: 'Leave empty if no password',
+      connect: 'Connect',
+      connecting: 'Connecting…',
+      disconnect: 'Disconnect',
+      disconnected: 'Disconnected',
+      connectingState: 'Connecting…',
+      connected: 'Connected',
+      reconnecting: 'Restoring…',
+      unavailable: 'Unavailable',
+      waitingConnection: 'Waiting for connection…',
+      back: 'Back',
+      sessionNotFound: 'This VNC session does not exist or has been closed.',
+      errorEmptyAddress: 'Please enter a VNC address',
+      errorInvalidPort: 'Invalid port format',
+      errorConnectFailed: 'Could not connect to the target address',
+      errorAuthFailed: 'Wrong password or the target refused the connection',
+      errorDisconnected: 'The remote connection was disconnected',
+      errorGeneric: 'Connection failed',
+      addressHint: 'You can enter host:port or just the host. The default port is 5900.',
+      externalSessionNote: 'This is an external VNC session and will not appear in the machine list.'
     },
     home: {
       shellLabel: 'Desktop Workspace',
@@ -713,7 +783,13 @@ export const resources = {
         clearIso: 'Clear',
         saveAs: 'Save Somewhere Else',
         pickFile: 'Select File',
-        clear: 'Clear'
+        clear: 'Clear',
+        add: 'Add',
+        addArg: 'Add custom argument',
+        removeArg: 'Remove argument'
+      },
+      errors: {
+        invalidArgValue: 'Invalid argument value'
       },
       firmware: {
         auto: 'Auto',
@@ -849,6 +925,7 @@ export const resources = {
       liveDisplayReconnecting: 'Restoring the live display…',
       liveDisplayUnavailable: 'The live display is currently unavailable',
       info: 'Info',
+      keyboard: 'Keyboard',
       changeDisk: 'Change Disk',
       reset: 'Reset',
       close: 'Close',
@@ -859,6 +936,9 @@ export const resources = {
       scaleNative: '100%',
       scaleFit: 'Fit Window',
       scaleStretch: 'Stretch',
+      inputMode: 'Input Mode',
+      touchMode: 'Touch Mode',
+      mouseMode: 'Mouse Mode',
       more: 'More',
       enhancements: 'Install Sanaka Guest Enhancements',
       enhancementsWindows: 'Windows',

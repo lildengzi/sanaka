@@ -12,6 +12,8 @@ const { ClipboardBridgeService } = require('./ClipboardBridgeService');
 const { ClipboardBootstrapService, DEFAULT_BOOTSTRAP_PORT, normalizeMacAddress } = require('./ClipboardBootstrapService');
 const { IsoImageService } = require('./IsoImageService');
 const { SanakaToolsService } = require('./SanakaToolsService');
+const { WebAudioBridge } = require('./WebAudioBridge');
+const { QemuPathProxy } = require('./QemuPathProxy');
 
 const MACHINE_CONFIG_FILE = 'machine.svm';
 const STOP_GRACE_TIMEOUT_MS = 8000;
@@ -94,10 +96,25 @@ function resolveDiskPath(bundlePath, disk) {
   return path.resolve(disk.path);
 }
 
+function resolveOptionalMachineAssetPath(bundlePath, targetPath) {
+  const value = String(targetPath || '').trim();
+  if (!value) {
+    return '';
+  }
+  if (path.isAbsolute(value)) {
+    return path.resolve(value);
+  }
+  return path.resolve(bundlePath, value);
+}
+
 async function normalizeMachinePaths(bundlePath, machine) {
   const nextMachine = {
     ...machine,
-    disks: Array.isArray(machine.disks) ? [...machine.disks] : []
+    disks: Array.isArray(machine.disks) ? [...machine.disks] : [],
+    media: {
+      iso: String(machine.media?.iso || ''),
+      floppy: String(machine.media?.floppy || '')
+    }
   };
 
   for (let index = 0; index < nextMachine.disks.length; index += 1) {
@@ -112,6 +129,47 @@ async function normalizeMachinePaths(bundlePath, machine) {
       ...disk,
       path: resolvedPath
     };
+  }
+
+  if (nextMachine.media.iso) {
+    const resolvedIsoPath = resolveOptionalMachineAssetPath(bundlePath, nextMachine.media.iso);
+    if (!(await fileExists(resolvedIsoPath))) {
+      throw new Error(`Optical image not found: ${nextMachine.media.iso}`);
+    }
+    nextMachine.media.iso = resolvedIsoPath;
+  }
+
+  if (nextMachine.media.floppy) {
+    const resolvedFloppyPath = resolveOptionalMachineAssetPath(bundlePath, nextMachine.media.floppy);
+    if (!(await fileExists(resolvedFloppyPath))) {
+      throw new Error(`Floppy image not found: ${nextMachine.media.floppy}`);
+    }
+    nextMachine.media.floppy = resolvedFloppyPath;
+  }
+
+  if (machine.advanced?.firmware?.code_path || machine.advanced?.firmware?.vars_path) {
+    nextMachine.advanced = {
+      ...machine.advanced,
+      firmware: {
+        ...machine.advanced.firmware
+      }
+    };
+
+    if (nextMachine.advanced.firmware.code_path) {
+      const resolvedCodePath = resolveOptionalMachineAssetPath(bundlePath, nextMachine.advanced.firmware.code_path);
+      if (!(await fileExists(resolvedCodePath))) {
+        throw new Error(`UEFI firmware code file was not found: ${nextMachine.advanced.firmware.code_path}`);
+      }
+      nextMachine.advanced.firmware.code_path = resolvedCodePath;
+    }
+
+    if (nextMachine.advanced.firmware.vars_path) {
+      const resolvedVarsPath = resolveOptionalMachineAssetPath(bundlePath, nextMachine.advanced.firmware.vars_path);
+      if (!(await fileExists(resolvedVarsPath))) {
+        throw new Error(`UEFI firmware vars file was not found: ${nextMachine.advanced.firmware.vars_path}`);
+      }
+      nextMachine.advanced.firmware.vars_path = resolvedVarsPath;
+    }
   }
 
   return nextMachine;
@@ -220,6 +278,9 @@ class RuntimeManager {
     this.sanakaToolsService = options.sanakaToolsService || new SanakaToolsService({
       app: this.app
     });
+    this.pathProxyService = options.pathProxyService || new QemuPathProxy({
+      platform: this.platform
+    });
     this.clipboardBootstrapService = options.clipboardBootstrapService || new ClipboardBootstrapService({
       port: options.clipboardBootstrapPort || DEFAULT_BOOTSTRAP_PORT,
       resolveSessionByMac: (machineMac) => this.#resolveClipboardSessionByMac(machineMac),
@@ -277,6 +338,7 @@ class RuntimeManager {
 
     const runtimeDir = path.join(this.app.getPath('userData'), 'runtime-preview', machine.id);
     await fsPromises.mkdir(runtimeDir, { recursive: true });
+    const proxiedMachine = await this.#resolveMachineLaunchPaths(machine, runtimeDir, null);
 
     const qmpBase = getQmpAddress(this.platform, runtimeDir, machine.id);
     if (qmpBase.transport === 'tcp') {
@@ -288,7 +350,7 @@ class RuntimeManager {
     const displayNumber = port - 5900;
 
     const buildResult = this.builder.build({
-      machine,
+      machine: proxiedMachine,
       environment,
       runtimePaths: {
         runtimeDir,
@@ -384,8 +446,18 @@ class RuntimeManager {
   async startMachine(machinePath) {
     const environment = await this.detectQemu();
     const { bundlePath, configPath } = normalizeBundlePath(machinePath);
-    const content = await fsPromises.readFile(configPath, 'utf8');
-    const machine = await normalizeMachinePaths(bundlePath, parseMachineConfig(content));
+
+    let machine;
+    try {
+      const content = await fsPromises.readFile(configPath, 'utf8');
+      machine = await normalizeMachinePaths(bundlePath, parseMachineConfig(content));
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Failed to load the machine configuration.',
+        state: null
+      };
+    }
 
     const existing = this.registry.get(machine.id);
     if (existing && existing.status === 'stopping') {
@@ -409,6 +481,10 @@ class RuntimeManager {
 
     const runtimeDir = path.join(this.app.getPath('userData'), 'runtime', machine.id);
     await fsPromises.mkdir(runtimeDir, { recursive: true });
+    const pathProxyLogs = [];
+    const proxiedMachine = await this.#resolveMachineLaunchPaths(machine, runtimeDir, (message) => {
+      pathProxyLogs.push(message);
+    });
 
     const qmpBase = getQmpAddress(this.platform, runtimeDir, machine.id);
     if (qmpBase.transport === 'tcp') {
@@ -424,7 +500,7 @@ class RuntimeManager {
     let buildResult;
     try {
       buildResult = this.builder.build({
-        machine,
+        machine: proxiedMachine,
         environment,
         runtimePaths: {
           runtimeDir,
@@ -456,6 +532,7 @@ class RuntimeManager {
     const logStream = fs.createWriteStream(logPath, { flags: 'a' });
     appendRuntimeLogLine(logStream, `machine starting id=${machine.id}`);
     appendRuntimeLogLine(logStream, `expected machineMac=${deriveStableMacAddress(machine.id)}`);
+    pathProxyLogs.forEach((message) => appendRuntimeLogLine(logStream, message));
     appendRuntimeLogLine(logStream, `qemu command=${[buildResult.binaryPath, ...buildResult.args].map(shellQuote).join(' ')}`);
     let startupStderr = '';
     child.stdout?.pipe(logStream);
@@ -496,6 +573,7 @@ class RuntimeManager {
       process: child,
       qmpClient: null,
       clipboardBridgeService: null,
+      webAudioBridge: null,
       machine,
       logStream
     });
@@ -557,6 +635,7 @@ class RuntimeManager {
       record.qmpClient = qmpClient;
       record.status = status?.running === false ? 'starting' : 'running';
       await this.#applyClipboardBridge(record, runtimeDir);
+      await this.#applyWebAudioBridge(record, runtimeDir);
       this.registry.set(record);
 
       this.emitEvent(
@@ -702,13 +781,21 @@ class RuntimeManager {
       return { ok: false, error: `No ${drive} drive is available on this machine.` };
     }
 
+    const runtimeDir = path.join(this.app.getPath('userData'), 'runtime', machineId);
+    await fsPromises.mkdir(runtimeDir, { recursive: true });
+    const resolvedMediaPath = await this.#resolveLaunchPathForQemu(isoPath, runtimeDir, `change-media-${drive}`, (message) => {
+      if (record.logStream) {
+        appendRuntimeLogLine(record.logStream, message);
+      }
+    });
+
     let lastError = null;
     try {
       for (const targetId of targetIds) {
         try {
           await record.qmpClient.blockdevChangeMedium({
             id: targetId,
-            filename: isoPath,
+            filename: resolvedMediaPath,
             format: path.extname(isoPath).toLowerCase() === '.iso' ? 'raw' : 'raw',
             readOnly: true
           });
@@ -856,6 +943,11 @@ class RuntimeManager {
       await record.clipboardBridgeService.stop().catch(() => null);
     }
 
+    if (record.webAudioBridge) {
+      await this.#stopWebAudioCapture(record).catch(() => null);
+      await record.webAudioBridge.stop().catch(() => null);
+    }
+
     if (record.logStream) {
       const stream = record.logStream;
       await Promise.race([
@@ -872,6 +964,7 @@ class RuntimeManager {
     record.lastError = error ? error.message : null;
     record.qmpClient = null;
     record.clipboardBridgeService = null;
+    record.webAudioBridge = null;
     record.clipboardBridge = null;
     record.process = null;
     record.machine = null;
@@ -912,6 +1005,37 @@ class RuntimeManager {
       machineMac: record.machineMac || undefined,
       clipboardBridge: record.clipboardBridge || undefined
     };
+  }
+
+  async getWebAudioState(machineId) {
+    const record = this.registry.get(machineId);
+    if (!record || !record.webAudioBridge) {
+      return null;
+    }
+    return record.webAudioBridge.getState();
+  }
+
+  onWebAudioChunk(machineId, handler) {
+    const record = this.registry.get(machineId);
+    if (!record?.webAudioBridge || typeof handler !== 'function') {
+      return () => {};
+    }
+
+    const wrapped = (chunk) => {
+      handler(chunk);
+    };
+    record.webAudioBridge.on('chunk', wrapped);
+    return () => {
+      record.webAudioBridge?.off('chunk', wrapped);
+    };
+  }
+
+  getWebAudioHeader(machineId) {
+    const record = this.registry.get(machineId);
+    if (!record?.webAudioBridge) {
+      return null;
+    }
+    return record.webAudioBridge.getStreamHeader();
   }
 
   async #applyClipboardBridge(record, runtimeDir) {
@@ -977,6 +1101,97 @@ class RuntimeManager {
     }
 
     record.clipboardBridge = record.clipboardBridgeService.getState();
+  }
+
+  async #applyWebAudioBridge(record, runtimeDir) {
+    if (!record.qmpClient) {
+      return;
+    }
+
+    const configuredAudioBackend = record.machine?.advanced?.audio_backend;
+    if (configuredAudioBackend === 'none' || configuredAudioBackend === 'spice') {
+      if (record.logStream) {
+        appendRuntimeLogLine(
+          record.logStream,
+          `[web-audio] skipped: audio backend ${configuredAudioBackend} does not expose audiodev=audio0`
+        );
+      }
+      return;
+    }
+
+    if (!record.webAudioBridge) {
+      record.webAudioBridge = new WebAudioBridge({
+        machineId: record.machineId,
+        runtimeDir,
+        log: (message) => {
+          const activeRecord = this.registry.get(record.machineId);
+          if (activeRecord?.logStream) {
+            appendRuntimeLogLine(activeRecord.logStream, message);
+          }
+        }
+      });
+      await record.webAudioBridge.start();
+    }
+
+    try {
+      if (record.logStream) {
+        appendRuntimeLogLine(
+          record.logStream,
+          `[web-audio] enabling wavcapture on audiodev=audio0 -> ${record.webAudioBridge.captureFilePath}`
+        );
+      }
+      await record.qmpClient.humanMonitorCommand(
+        `wavcapture "${record.webAudioBridge.captureFilePath}" audio0 44100 16 2`
+      );
+      if (record.logStream) {
+        appendRuntimeLogLine(record.logStream, '[web-audio] wavcapture enabled');
+      }
+    } catch (error) {
+      if (record.logStream) {
+        appendRuntimeLogLine(
+          record.logStream,
+          `[web-audio] failed to enable wavcapture: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+      await record.webAudioBridge.stop().catch(() => null);
+      record.webAudioBridge = null;
+    }
+  }
+
+  async #stopWebAudioCapture(record) {
+    if (!record?.qmpClient) {
+      return;
+    }
+
+    try {
+      await record.qmpClient.humanMonitorCommand('stopcapture all');
+    } catch (error) {
+      if (record.logStream) {
+        appendRuntimeLogLine(
+          record.logStream,
+          `[web-audio] stopcapture failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+  }
+
+  async #resolveMachineLaunchPaths(machine, runtimeDir, log) {
+    const result = await this.pathProxyService.resolveMachinePaths({
+      machine,
+      runtimeDir,
+      log
+    });
+    return result.machine || machine;
+  }
+
+  async #resolveLaunchPathForQemu(sourcePath, runtimeDir, slot, log) {
+    const result = await this.pathProxyService.resolveLaunchPath({
+      sourcePath,
+      runtimeDir,
+      slot,
+      log
+    });
+    return result.qemuPath || sourcePath;
   }
 
   #resolveClipboardSessionByMac(machineMac) {
